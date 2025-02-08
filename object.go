@@ -269,6 +269,12 @@ type DecoderConfig struct {
 	// field name or tag. Defaults to `strings.EqualFold`. This can be used
 	// to implement case-sensitive tag values, support snake casing, etc.
 	MatchName func(mapKey, fieldName string) bool
+
+	// SkipKeys is a list of keys that should be skipped during decoding.
+	SkipKeys []string
+
+	// SkipSameValues is true will skipped the same values during decoding.
+	SkipSameValues bool
 }
 
 // A Decoder takes a raw interface value and turns it into structured
@@ -397,6 +403,13 @@ func (d *Decoder) Decode(input, output any, configs ...func(c *DecoderConfig)) e
 
 // Decodes an unknown data type into a specific reflection value.
 func (d *Decoder) decode(inputName, outputName string, input any, outVal reflect.Value) error {
+
+	if d.shouldSkipKey(inputName) || d.shouldSkipKey(outputName) {
+		d.config.Metadata.Unused = append(d.config.Metadata.Unused, inputName)
+		d.config.Metadata.Unset = append(d.config.Metadata.Unset, outputName)
+		return nil
+	}
+
 	var inputVal reflect.Value
 	if input != nil {
 		inputVal = reflect.ValueOf(input)
@@ -443,6 +456,14 @@ func (d *Decoder) decode(inputName, outputName string, input any, outVal reflect
 			} else {
 				return fmt.Errorf("error decoding '%s' -> '%s': %w", inputName, outputName, err)
 			}
+		}
+	}
+
+	if d.config.SkipSameValues {
+		if reflect.DeepEqual(input, outVal.Interface()) {
+			d.config.Metadata.Unused = append(d.config.Metadata.Unused, inputName)
+			d.config.Metadata.Unset = append(d.config.Metadata.Unset, outputName)
+			return nil
 		}
 	}
 
@@ -1211,20 +1232,20 @@ func (d *Decoder) decodeArray(inputName, outputName string, data any, val reflec
 	return nil
 }
 
-func (d *Decoder) decodeStruct(inputName, outputName string, data any, val reflect.Value) error {
-	dataVal := reflect.Indirect(reflect.ValueOf(data))
+func (d *Decoder) decodeStruct(inputName, outputName string, input any, outputVal reflect.Value) error {
+	inputVal := reflect.Indirect(reflect.ValueOf(input))
 
-	// If the type of the value to write to and the data match directly,
+	// If the type of the value to write to and the input match directly,
 	// then we just set it directly instead of recursing into the structure.
-	if dataVal.Type() == val.Type() {
-		val.Set(dataVal)
+	if inputVal.Type() == outputVal.Type() {
+		outputVal.Set(inputVal)
 		return nil
 	}
 
-	dataValKind := dataVal.Kind()
+	dataValKind := inputVal.Kind()
 	switch dataValKind {
 	case reflect.Map:
-		return d.decodeStructFromMap(inputName, outputName, dataVal, val)
+		return d.decodeStructFromMap(inputName, outputName, inputVal, outputVal)
 
 	case reflect.Struct:
 		// Not the most efficient way to do this but we can optimize later if
@@ -1242,15 +1263,15 @@ func (d *Decoder) decodeStruct(inputName, outputName string, data any, val refle
 		addrVal := reflect.New(mval.Type())
 
 		reflect.Indirect(addrVal).Set(mval)
-		if err := d.decodeMapFromStruct(inputName, outputName, dataVal, reflect.Indirect(addrVal), mval); err != nil {
+		if err := d.decodeMapFromStruct(inputName, outputName, inputVal, reflect.Indirect(addrVal), mval); err != nil {
 			return err
 		}
 
-		result := d.decodeStructFromMap(inputName, outputName, reflect.Indirect(addrVal), val)
+		result := d.decodeStructFromMap(inputName, outputName, reflect.Indirect(addrVal), outputVal)
 		return result
 
 	default:
-		return fmt.Errorf("'%s' expected a map, got '%s'", outputName, dataVal.Kind())
+		return fmt.Errorf("'%s' expected a map, got '%s'", outputName, inputVal.Kind())
 	}
 }
 
@@ -1475,6 +1496,15 @@ func (d *Decoder) decodeStructFromMap(inputName, outputName string, dataVal, val
 	}
 
 	return nil
+}
+
+func (d *Decoder) shouldSkipKey(key string) bool {
+	for _, keyToSkip := range d.config.SkipKeys {
+		if key == keyToSkip {
+			return true
+		}
+	}
+	return false
 }
 
 func isEmptyValue(v reflect.Value) bool {
