@@ -1,6 +1,6 @@
-# mapstructure [![Godoc](https://godoc.org/github.com/mitchellh/mapstructure?status.svg)](https://godoc.org/github.com/mitchellh/mapstructure)
+# object [![Godoc](https://godoc.org/github.com/epkgs/object?status.svg)](https://godoc.org/github.com/epkgs/object)
 
-mapstructure is a Go library for decoding generic map values to structures
+object is a Go library for decoding generic map values to structures
 and vice versa, while providing helpful error handling.
 
 This library is most useful when decoding values from some data stream (JSON,
@@ -14,12 +14,12 @@ structure.
 Standard `go get`:
 
 ```
-$ go get github.com/mitchellh/mapstructure
+$ go get github.com/epkgs/object
 ```
 
 ## Usage & Example
 
-For usage and examples see the [Godoc](http://godoc.org/github.com/mitchellh/mapstructure).
+For usage and examples see the [Godoc](http://godoc.org/github.com/epkgs/object).
 
 The `Decode` function has examples associated with it there.
 

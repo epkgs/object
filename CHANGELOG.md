@@ -6,7 +6,7 @@
 ## 1.5.0
 
 * New option `IgnoreUntaggedFields` to ignore decoding to any fields
-  without `mapstructure` (or the configured tag name) set [GH-277]
+  without `object` (or the configured tag name) set [GH-277]
 * New option `ErrorUnset` which makes it an error if any fields
   in a target struct are not set by the decoding process. [GH-225]
 * New function `OrComposeDecodeHookFunc` to help compose decode hooks. [GH-240]
@@ -71,7 +71,7 @@
 ## 1.2.0
 
 * Added support to capture unused values in a field using the `",remain"` value
-  in the mapstructure tag. There is an example to showcase usage.
+  in the object tag. There is an example to showcase usage.
 * Added `DecoderConfig` option to always squash embedded structs
 * `json.Number` can decode into `uint` types
 * Empty slices are preserved and not replaced with nil slices

@@ -1,4 +1,4 @@
-package mapstructure
+package object
 
 import (
 	"reflect"
@@ -360,8 +360,8 @@ func TestNextSquashMapstructure(t *testing.T) {
 		Level1 struct {
 			Level2 struct {
 				Foo string
-			} `mapstructure:",squash"`
-		} `mapstructure:",squash"`
+			} `object:",squash"`
+		} `object:",squash"`
 	}{}
 	err := Decode(map[interface{}]interface{}{"foo": "baz"}, &data)
 	if err != nil {
@@ -605,8 +605,8 @@ func TestMapSquash(t *testing.T) {
 // GH-238: Empty key name when decoding map from struct with only omitempty flag
 func TestMapOmitEmptyWithEmptyFieldnameInTag(t *testing.T) {
 	type Struct struct {
-		Username string `mapstructure:",omitempty"`
-		Age      int    `mapstructure:",omitempty"`
+		Username string `object:",omitempty"`
+		Age      int    `object:",omitempty"`
 	}
 
 	s := Struct{

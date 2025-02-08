@@ -1,4 +1,4 @@
-package mapstructure
+package object
 
 import (
 	"encoding/json"
@@ -45,7 +45,7 @@ type BasicPointer struct {
 }
 
 type BasicSquash struct {
-	Test Basic `mapstructure:",squash"`
+	Test Basic `object:",squash"`
 }
 
 type Embedded struct {
@@ -59,26 +59,26 @@ type EmbeddedPointer struct {
 }
 
 type EmbeddedSquash struct {
-	Basic   `mapstructure:",squash"`
+	Basic   `object:",squash"`
 	Vunique string
 }
 
 type EmbeddedPointerSquash struct {
-	*Basic  `mapstructure:",squash"`
+	*Basic  `object:",squash"`
 	Vunique string
 }
 
 type BasicMapStructure struct {
-	Vunique string     `mapstructure:"vunique"`
-	Vtime   *time.Time `mapstructure:"time"`
+	Vunique string     `object:"vunique"`
+	Vtime   *time.Time `object:"time"`
 }
 
 type NestedPointerWithMapstructure struct {
-	Vbar *BasicMapStructure `mapstructure:"vbar"`
+	Vbar *BasicMapStructure `object:"vbar"`
 }
 
 type EmbeddedPointerSquashWithNestedMapstructure struct {
-	*NestedPointerWithMapstructure `mapstructure:",squash"`
+	*NestedPointerWithMapstructure `object:",squash"`
 	Vunique                        string
 }
 
@@ -91,19 +91,19 @@ type EmbeddedAndNamed struct {
 type SliceAlias []string
 
 type EmbeddedSlice struct {
-	SliceAlias `mapstructure:"slice_alias"`
+	SliceAlias `object:"slice_alias"`
 	Vunique    string
 }
 
 type ArrayAlias [2]string
 
 type EmbeddedArray struct {
-	ArrayAlias `mapstructure:"array_alias"`
+	ArrayAlias `object:"array_alias"`
 	Vunique    string
 }
 
 type SquashOnNonStructType struct {
-	InvalidSquashType int `mapstructure:",squash"`
+	InvalidSquashType int `object:",squash"`
 }
 
 type Map struct {
@@ -170,28 +170,28 @@ type Func struct {
 }
 
 type Tagged struct {
-	Extra string `mapstructure:"bar,what,what"`
-	Value string `mapstructure:"foo"`
+	Extra string `object:"bar,what,what"`
+	Value string `object:"foo"`
 }
 
 type Remainder struct {
 	A     string
-	Extra map[string]interface{} `mapstructure:",remain"`
+	Extra map[string]interface{} `object:",remain"`
 }
 
 type StructWithOmitEmpty struct {
-	VisibleStringField string                 `mapstructure:"visible-string"`
-	OmitStringField    string                 `mapstructure:"omittable-string,omitempty"`
-	VisibleIntField    int                    `mapstructure:"visible-int"`
-	OmitIntField       int                    `mapstructure:"omittable-int,omitempty"`
-	VisibleFloatField  float64                `mapstructure:"visible-float"`
-	OmitFloatField     float64                `mapstructure:"omittable-float,omitempty"`
-	VisibleSliceField  []interface{}          `mapstructure:"visible-slice"`
-	OmitSliceField     []interface{}          `mapstructure:"omittable-slice,omitempty"`
-	VisibleMapField    map[string]interface{} `mapstructure:"visible-map"`
-	OmitMapField       map[string]interface{} `mapstructure:"omittable-map,omitempty"`
-	NestedField        *Nested                `mapstructure:"visible-nested"`
-	OmitNestedField    *Nested                `mapstructure:"omittable-nested,omitempty"`
+	VisibleStringField string                 `object:"visible-string"`
+	OmitStringField    string                 `object:"omittable-string,omitempty"`
+	VisibleIntField    int                    `object:"visible-int"`
+	OmitIntField       int                    `object:"omittable-int,omitempty"`
+	VisibleFloatField  float64                `object:"visible-float"`
+	OmitFloatField     float64                `object:"omittable-float,omitempty"`
+	VisibleSliceField  []interface{}          `object:"visible-slice"`
+	OmitSliceField     []interface{}          `object:"omittable-slice,omitempty"`
+	VisibleMapField    map[string]interface{} `object:"visible-map"`
+	OmitMapField       map[string]interface{} `object:"omittable-map,omitempty"`
+	NestedField        *Nested                `object:"visible-nested"`
+	OmitNestedField    *Nested                `object:"omittable-nested,omitempty"`
 }
 
 type TypeConversionResult struct {
@@ -2167,8 +2167,8 @@ func TestDecodeTable(t *testing.T) {
 		{
 			"omit tag struct",
 			&struct {
-				Value string `mapstructure:"value"`
-				Omit  string `mapstructure:"-"`
+				Value string `object:"value"`
+				Omit  string `object:"-"`
 			}{
 				Value: "value",
 				Omit:  "omit",
@@ -2222,8 +2222,8 @@ func TestDecodeTable(t *testing.T) {
 		{
 			"struct with omitempty tag return non-empty values",
 			&struct {
-				VisibleField interface{} `mapstructure:"visible"`
-				OmitField    interface{} `mapstructure:"omittable,omitempty"`
+				VisibleField interface{} `object:"visible"`
+				OmitField    interface{} `object:"omittable,omitempty"`
 			}{
 				VisibleField: nil,
 				OmitField:    "string",
@@ -2235,8 +2235,8 @@ func TestDecodeTable(t *testing.T) {
 		{
 			"struct with omitempty tag ignore empty values",
 			&struct {
-				VisibleField interface{} `mapstructure:"visible"`
-				OmitField    interface{} `mapstructure:"omittable,omitempty"`
+				VisibleField interface{} `object:"visible"`
+				OmitField    interface{} `object:"omittable,omitempty"`
 			}{
 				VisibleField: nil,
 				OmitField:    nil,
@@ -2653,9 +2653,9 @@ func TestDecoder_MatchName(t *testing.T) {
 	t.Parallel()
 
 	type Target struct {
-		FirstMatch  string `mapstructure:"first_match"`
+		FirstMatch  string `object:"first_match"`
 		SecondMatch string
-		NoMatch     string `mapstructure:"no_match"`
+		NoMatch     string `object:"no_match"`
 	}
 
 	input := map[string]interface{}{
@@ -2695,9 +2695,9 @@ func TestDecoder_MatchName(t *testing.T) {
 func TestDecoder_IgnoreUntaggedFields(t *testing.T) {
 	type Input struct {
 		UntaggedNumber int
-		TaggedNumber   int `mapstructure:"tagged_number"`
+		TaggedNumber   int `object:"tagged_number"`
 		UntaggedString string
-		TaggedString   string `mapstructure:"tagged_string"`
+		TaggedString   string `object:"tagged_string"`
 	}
 	input := &Input{
 		UntaggedNumber: 31,
