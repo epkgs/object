@@ -404,9 +404,7 @@ func (d *Decoder) Decode(input, output any, configs ...func(c *DecoderConfig)) e
 // Decodes an unknown data type into a specific reflection value.
 func (d *Decoder) decode(inputName, outputName string, input any, outVal reflect.Value) error {
 
-	if d.shouldSkipKey(inputName) || d.shouldSkipKey(outputName) {
-		d.config.Metadata.Unused = append(d.config.Metadata.Unused, inputName)
-		d.config.Metadata.Unset = append(d.config.Metadata.Unset, outputName)
+	if d.shouldSkipKey(inputName, outputName) {
 		return nil
 	}
 
@@ -426,11 +424,7 @@ func (d *Decoder) decode(inputName, outputName string, input any, outVal reflect
 		// to true.
 		if d.config.ZeroFields {
 			outVal.Set(reflect.Zero(outVal.Type()))
-
-			if d.config.Metadata != nil && inputName != "" && outputName != "" {
-				d.config.Metadata.Keys = append(d.config.Metadata.Keys, outputName)
-				d.config.Metadata.KeysMap[outputName] = inputName
-			}
+			d.config.Metadata.addKeys(inputName, outputName)
 		}
 		return nil
 	}
@@ -439,10 +433,8 @@ func (d *Decoder) decode(inputName, outputName string, input any, outVal reflect
 		// If the input value is invalid, then we just set the value
 		// to be the zero value.
 		outVal.Set(reflect.Zero(outVal.Type()))
-		if d.config.Metadata != nil && inputName != "" && outputName != "" {
-			d.config.Metadata.Keys = append(d.config.Metadata.Keys, outputName)
-			d.config.Metadata.KeysMap[outputName] = inputName
-		}
+
+		d.config.Metadata.addKeys(inputName, outputName)
 		return nil
 	}
 
@@ -461,8 +453,8 @@ func (d *Decoder) decode(inputName, outputName string, input any, outVal reflect
 
 	if d.config.SkipSameValues {
 		if reflect.DeepEqual(input, outVal.Interface()) {
-			d.config.Metadata.Unused = append(d.config.Metadata.Unused, inputName)
-			d.config.Metadata.Unset = append(d.config.Metadata.Unset, outputName)
+			d.config.Metadata.addUnused(inputName)
+			d.config.Metadata.addUnset(outputName)
 			return nil
 		}
 	}
@@ -502,9 +494,8 @@ func (d *Decoder) decode(inputName, outputName string, input any, outVal reflect
 
 	// If we reached here, then we successfully decoded SOMETHING, so
 	// mark the key as used if we're tracking metainput.
-	if addMetaKey && d.config.Metadata != nil && inputName != "" && outputName != "" {
-		d.config.Metadata.Keys = append(d.config.Metadata.Keys, outputName)
-		d.config.Metadata.KeysMap[outputName] = inputName
+	if addMetaKey {
+		d.config.Metadata.addKeys(inputName, outputName)
 	}
 
 	return err
@@ -881,8 +872,21 @@ func (d *Decoder) decodeMapFromMap(inputName, outputName string, dataVal reflect
 	}
 
 	for _, k := range dataVal.MapKeys() {
-		inFieldName := inputName + "[" + k.String() + "]"
-		outFieldName := outputName + "[" + k.String() + "]"
+		kStr := k.String()
+
+		inFieldName := kStr
+		if inputName != "" {
+			inFieldName = inputName + "[" + inFieldName + "]"
+		}
+
+		outFieldName := kStr
+		if outputName != "" {
+			outFieldName = outputName + "[" + outFieldName + "]"
+		}
+
+		if d.shouldSkipKey(inFieldName, outFieldName) {
+			continue
+		}
 
 		// First decode the key into the proper type
 		currentKey := reflect.Indirect(reflect.New(valKeyType))
@@ -932,7 +936,7 @@ func (d *Decoder) decodeMapFromStruct(_, _ string, dataVal reflect.Value, val re
 
 		tagValue := f.Tag.Get(d.config.TagName)
 		inFieldName := f.Name
-		outFieldName := f.Name
+		var outFieldName string
 
 		if tagValue == "" && d.config.IgnoreUntaggedFields {
 			continue
@@ -976,16 +980,34 @@ func (d *Decoder) decodeMapFromStruct(_, _ string, dataVal reflect.Value, val re
 			outFieldName = tagValue
 		}
 
+		if outFieldName == "" {
+			outFieldName = toLowerCamel(inFieldName)
+		}
+
+		if d.shouldSkipKey(inFieldName, outFieldName) {
+			continue
+		}
+
 		switch v.Kind() {
 		// this is an embedded struct, so handle it differently
 		case reflect.Struct:
-			x := reflect.New(v.Type())
+
+			inputFieldType := v.Type()
+			x := reflect.New(inputFieldType)
 			x.Elem().Set(v)
 
 			vType := valMap.Type()
 			vKeyType := vType.Key()
 			vElemType := vType.Elem()
 			mType := reflect.MapOf(vKeyType, vElemType)
+
+			// struct 是否可以塞入 map
+			if inputFieldType.AssignableTo(vElemType) {
+				valMap.SetMapIndex(reflect.ValueOf(outFieldName), v)
+				continue
+			}
+
+			// 新创建 map 继续递归
 			vMap := reflect.MakeMap(mType)
 
 			// Creating a pointer to a map so that other methods can completely
@@ -1148,6 +1170,11 @@ func (d *Decoder) decodeSlice(inputName, outputName string, data any, val reflec
 
 		inFieldName := inputName + "[" + strconv.Itoa(i) + "]"
 		outFieldName := outputName + "[" + strconv.Itoa(i) + "]"
+
+		if d.shouldSkipKey(inFieldName, outFieldName) {
+			continue
+		}
+
 		if err := d.decode(inFieldName, outFieldName, currentData, currentField); err != nil {
 			errors = appendErrors(errors, err)
 		}
@@ -1216,6 +1243,10 @@ func (d *Decoder) decodeArray(inputName, outputName string, data any, val reflec
 
 		inFieldName := inputName + "[" + strconv.Itoa(i) + "]"
 		outFieldName := outputName + "[" + strconv.Itoa(i) + "]"
+
+		if d.shouldSkipKey(inFieldName, outFieldName) {
+			continue
+		}
 		if err := d.decode(inFieldName, outFieldName, currentData, currentField); err != nil {
 			errors = appendErrors(errors, err)
 		}
@@ -1483,28 +1514,75 @@ func (d *Decoder) decodeStructFromMap(inputName, outputName string, dataVal, val
 			if inputName != "" {
 				key = inputName + "[" + key + "]"
 			}
-
-			d.config.Metadata.Unused = append(d.config.Metadata.Unused, key)
+			d.config.Metadata.addUnused(key)
 		}
 		for outKey := range targetValKeysUnset {
 			key := outKey
 			if outputName != "" {
 				key = outputName + "." + key
 			}
-			d.config.Metadata.Unset = append(d.config.Metadata.Unset, key)
+			d.config.Metadata.addUnset(key)
 		}
 	}
 
 	return nil
 }
 
-func (d *Decoder) shouldSkipKey(key string) bool {
+func (d *Decoder) shouldSkipKey(inputKey, outputKey string) bool {
+
+	if inputKey == "" || outputKey == "" {
+		return false
+	}
+
 	for _, keyToSkip := range d.config.SkipKeys {
-		if key == keyToSkip {
+		if inputKey == keyToSkip || outputKey == keyToSkip {
+			d.config.Metadata.addUnused(inputKey)
+			d.config.Metadata.addUnset(outputKey)
 			return true
 		}
 	}
 	return false
+}
+
+func (md *Metadata) addKeys(inputName, outputName string) {
+	if md == nil {
+		return
+	}
+
+	if inputName == "" {
+		return
+	}
+
+	if outputName == "" {
+		return
+	}
+
+	md.Keys = append(md.Keys, outputName)
+	md.KeysMap[outputName] = inputName
+}
+
+func (md *Metadata) addUnused(key string) {
+	if md == nil {
+		return
+	}
+
+	if key == "" {
+		return
+	}
+
+	md.Unused = append(md.Unused, key)
+}
+
+func (md *Metadata) addUnset(key string) {
+	if md == nil {
+		return
+	}
+
+	if key == "" {
+		return
+	}
+
+	md.Unset = append(md.Unset, key)
 }
 
 func isEmptyValue(v reflect.Value) bool {
