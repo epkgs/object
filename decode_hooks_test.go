@@ -14,14 +14,14 @@ func TestComposeDecodeHookFunc(t *testing.T) {
 	f1 := func(
 		f reflect.Kind,
 		t reflect.Kind,
-		data interface{}) (interface{}, error) {
+		data any) (any, error) {
 		return data.(string) + "foo", nil
 	}
 
 	f2 := func(
 		f reflect.Kind,
 		t reflect.Kind,
-		data interface{}) (interface{}, error) {
+		data any) (any, error) {
 		return data.(string) + "bar", nil
 	}
 
@@ -38,11 +38,11 @@ func TestComposeDecodeHookFunc(t *testing.T) {
 }
 
 func TestComposeDecodeHookFunc_err(t *testing.T) {
-	f1 := func(reflect.Kind, reflect.Kind, interface{}) (interface{}, error) {
+	f1 := func(reflect.Kind, reflect.Kind, any) (any, error) {
 		return nil, errors.New("foo")
 	}
 
-	f2 := func(reflect.Kind, reflect.Kind, interface{}) (interface{}, error) {
+	f2 := func(reflect.Kind, reflect.Kind, any) (any, error) {
 		panic("NOPE")
 	}
 
@@ -61,14 +61,14 @@ func TestComposeDecodeHookFunc_kinds(t *testing.T) {
 	f1 := func(
 		f reflect.Kind,
 		t reflect.Kind,
-		data interface{}) (interface{}, error) {
+		data any) (any, error) {
 		return int(42), nil
 	}
 
 	f2 := func(
 		f reflect.Kind,
 		t reflect.Kind,
-		data interface{}) (interface{}, error) {
+		data any) (any, error) {
 		f2From = f
 		return data, nil
 	}
@@ -89,14 +89,14 @@ func TestOrComposeDecodeHookFunc(t *testing.T) {
 	f1 := func(
 		f reflect.Kind,
 		t reflect.Kind,
-		data interface{}) (interface{}, error) {
+		data any) (any, error) {
 		return data.(string) + "foo", nil
 	}
 
 	f2 := func(
 		f reflect.Kind,
 		t reflect.Kind,
-		data interface{}) (interface{}, error) {
+		data any) (any, error) {
 		return data.(string) + "bar", nil
 	}
 
@@ -116,21 +116,21 @@ func TestOrComposeDecodeHookFunc_correctValueIsLast(t *testing.T) {
 	f1 := func(
 		f reflect.Kind,
 		t reflect.Kind,
-		data interface{}) (interface{}, error) {
+		data any) (any, error) {
 		return nil, errors.New("f1 error")
 	}
 
 	f2 := func(
 		f reflect.Kind,
 		t reflect.Kind,
-		data interface{}) (interface{}, error) {
+		data any) (any, error) {
 		return nil, errors.New("f2 error")
 	}
 
 	f3 := func(
 		f reflect.Kind,
 		t reflect.Kind,
-		data interface{}) (interface{}, error) {
+		data any) (any, error) {
 		return data.(string) + "bar", nil
 	}
 
@@ -150,14 +150,14 @@ func TestOrComposeDecodeHookFunc_err(t *testing.T) {
 	f1 := func(
 		f reflect.Kind,
 		t reflect.Kind,
-		data interface{}) (interface{}, error) {
+		data any) (any, error) {
 		return nil, errors.New("f1 error")
 	}
 
 	f2 := func(
 		f reflect.Kind,
 		t reflect.Kind,
-		data interface{}) (interface{}, error) {
+		data any) (any, error) {
 		return nil, errors.New("f2 error")
 	}
 
@@ -190,16 +190,11 @@ func TestComposeDecodeHookFunc_safe_nofuncs(t *testing.T) {
 	}}
 
 	dst := &myStruct1{}
-	dConf := &DecoderConfig{
-		Result:      dst,
-		ErrorUnused: true,
-		DecodeHook:  f,
-	}
-	d, err := NewDecoder(dConf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = d.Decode(src)
+	d := New(func(c *DecoderConfig) {
+		c.ErrorUnused = true
+		c.DecodeHook = f
+	})
+	err := d.Decode(src, dst)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +207,7 @@ func TestStringToSliceHookFunc(t *testing.T) {
 	sliceValue := reflect.ValueOf([]byte("42"))
 	cases := []struct {
 		f, t   reflect.Value
-		result interface{}
+		result any
 		err    bool
 	}{
 		{sliceValue, sliceValue, []byte("42"), false},
@@ -251,7 +246,7 @@ func TestStringToTimeDurationHookFunc(t *testing.T) {
 	strValue := reflect.ValueOf("")
 	cases := []struct {
 		f, t   reflect.Value
-		result interface{}
+		result any
 		err    bool
 	}{
 		{reflect.ValueOf("5s"), timeValue, 5 * time.Second, false},
@@ -278,7 +273,7 @@ func TestStringToTimeHookFunc(t *testing.T) {
 	cases := []struct {
 		f, t   reflect.Value
 		layout string
-		result interface{}
+		result any
 		err    bool
 	}{
 		{reflect.ValueOf("2006-01-02T15:04:05Z"), timeValue, time.RFC3339,
@@ -306,7 +301,7 @@ func TestStringToIPHookFunc(t *testing.T) {
 	ipValue := reflect.ValueOf(net.IP{})
 	cases := []struct {
 		f, t   reflect.Value
-		result interface{}
+		result any
 		err    bool
 	}{
 		{reflect.ValueOf("1.2.3.4"), ipValue,
@@ -336,7 +331,7 @@ func TestStringToIPNetHookFunc(t *testing.T) {
 
 	cases := []struct {
 		f, t   reflect.Value
-		result interface{}
+		result any
 		err    bool
 	}{
 		{reflect.ValueOf("1.2.3.4/24"), ipNetValue,
@@ -368,7 +363,7 @@ func TestWeaklyTypedHook(t *testing.T) {
 	strValue := reflect.ValueOf("")
 	cases := []struct {
 		f, t   reflect.Value
-		result interface{}
+		result any
 		err    bool
 	}{
 		// TO STRING
@@ -445,23 +440,23 @@ func TestStructToMapHookFuncTabled(t *testing.T) {
 		},
 	}
 
-	testMap := map[string]interface{}{
-		"Sub": map[string]interface{}{
+	testMap := map[string]any{
+		"Sub": map[string]any{
 			"TestKey": "testval",
 		},
 	}
 
 	cases := []struct {
 		name     string
-		receiver interface{}
-		input    interface{}
-		expected interface{}
+		receiver any
+		input    any
+		expected any
 		err      bool
 	}{
 		{
 			"map receiver",
-			func() interface{} {
-				var res map[string]interface{}
+			func() any {
+				var res map[string]any
 				return &res
 			}(),
 			testStruct,
@@ -470,20 +465,20 @@ func TestStructToMapHookFuncTabled(t *testing.T) {
 		},
 		{
 			"interface receiver",
-			func() interface{} {
-				var res interface{}
+			func() any {
+				var res any
 				return &res
 			}(),
 			testStruct,
-			func() interface{} {
-				var exp interface{} = testMap
+			func() any {
+				var exp any = testMap
 				return &exp
 			}(),
 			false,
 		},
 		{
 			"slice receiver errors",
-			func() interface{} {
+			func() any {
 				var res []string
 				return &res
 			}(),
@@ -493,7 +488,7 @@ func TestStructToMapHookFuncTabled(t *testing.T) {
 		},
 		{
 			"slice to slice - no change",
-			func() interface{} {
+			func() any {
 				var res []string
 				return &res
 			}(),
@@ -503,7 +498,7 @@ func TestStructToMapHookFuncTabled(t *testing.T) {
 		},
 		{
 			"string to string - no change",
-			func() interface{} {
+			func() any {
 				var res string
 				return &res
 			}(),
@@ -518,17 +513,12 @@ func TestStructToMapHookFuncTabled(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cfg := &DecoderConfig{
-				DecodeHook: f,
-				Result:     tc.receiver,
-			}
 
-			d, err := NewDecoder(cfg)
-			if err != nil {
-				t.Fatalf("unexpected err %#v", err)
-			}
+			d := New(func(c *DecoderConfig) {
+				c.DecodeHook = f
+			})
 
-			err = d.Decode(tc.input)
+			err := d.Decode(tc.input, tc.receiver)
 			if tc.err != (err != nil) {
 				t.Fatalf("expected err %#v", err)
 			}
@@ -547,7 +537,7 @@ func TestTextUnmarshallerHookFunc(t *testing.T) {
 
 	cases := []struct {
 		f, t   reflect.Value
-		result interface{}
+		result any
 		err    bool
 	}{
 		{reflect.ValueOf("42"), reflect.ValueOf(big.Int{}), big.NewInt(42), false},
