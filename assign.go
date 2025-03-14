@@ -9,12 +9,23 @@ import (
 	"strings"
 )
 
+var defaultAssigner *assigner
 var weakAssigner *assigner
 
 func init() {
-	weakAssigner = newAssigner(func(c *AssignConfig) {
-		c.WeaklyTypedInput = true
-	})
+	defaultAssigner = &assigner{
+		config: &AssignConfig{
+			TagName:   "json",
+			Converter: toLowerCamel,
+		},
+	}
+	weakAssigner = &assigner{
+		config: &AssignConfig{
+			TagName:          "json",
+			Converter:        toLowerCamel,
+			WeaklyTypedInput: true,
+		},
+	}
 }
 
 // AssignConfig is the configuration that is used to create a new decoder
@@ -227,21 +238,15 @@ func (m *Metadata) UnsetFull() []string {
 // 返回值:
 //   - error: 如果解码过程中发生错误，则返回错误。
 func Assign(target any, source any, configs ...func(c *AssignConfig)) error {
-	// 创建一个实例，并应用配置函数。
-	assigner := newAssigner(configs...)
-	// 使用解码器将 source 的值解码到 target。
-	return assigner.Assign(target, source)
+	return defaultAssigner.Assign(target, source, configs...)
 }
 
 type assigner struct {
 	config *AssignConfig
 }
 
-func newAssigner(configs ...func(c *AssignConfig)) *assigner {
-	config := AssignConfig{
-		TagName:   "json",
-		Converter: toLowerCamel,
-	}
+func (a *assigner) withConfig(configs ...func(c *AssignConfig)) *assigner {
+	config := *a.config // copy config
 
 	for _, fn := range configs {
 		fn(&config)
@@ -258,6 +263,7 @@ func newAssigner(configs ...func(c *AssignConfig)) *assigner {
 			config.Metadata.unset = make(Keys, 0)
 		}
 	}
+
 	return &assigner{
 		config: &config,
 	}
@@ -276,15 +282,7 @@ func (a *assigner) Assign(target, source any, configs ...func(c *AssignConfig)) 
 
 	as := a
 	if len(configs) > 0 {
-		config := *a.config // copy config
-
-		for _, fn := range configs {
-			fn(&config)
-		}
-
-		as = &assigner{
-			config: &config,
-		}
+		as = as.withConfig(configs...)
 	}
 
 	return as.assign(targetVal, nil, source, nil)
