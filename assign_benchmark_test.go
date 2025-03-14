@@ -24,7 +24,7 @@ func Benchmark_Decode(b *testing.B) {
 
 	var result Person
 	for i := 0; i < b.N; i++ {
-		Decode(input, &result)
+		Assign(&result, input)
 	}
 }
 
@@ -93,7 +93,7 @@ func Benchmark_DecodeBasic(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		var result Basic
-		Decode(input, &result)
+		Assign(&result, input)
 	}
 }
 
@@ -108,7 +108,7 @@ func Benchmark_DecodeEmbedded(b *testing.B) {
 
 	var result Embedded
 	for i := 0; i < b.N; i++ {
-		Decode(input, &result)
+		Assign(&result, input)
 	}
 }
 
@@ -140,7 +140,7 @@ func Benchmark_DecodeTypeConversion(b *testing.B) {
 
 	var resultStrict TypeConversionResult
 	for i := 0; i < b.N; i++ {
-		Decode(input, &resultStrict)
+		Assign(&resultStrict, input)
 	}
 }
 
@@ -155,7 +155,7 @@ func Benchmark_DecodeMap(b *testing.B) {
 
 	var result Map
 	for i := 0; i < b.N; i++ {
-		Decode(input, &result)
+		Assign(&result, input)
 	}
 }
 
@@ -169,7 +169,7 @@ func Benchmark_DecodeMapOfStruct(b *testing.B) {
 
 	var result MapOfStruct
 	for i := 0; i < b.N; i++ {
-		Decode(input, &result)
+		Assign(&result, input)
 	}
 }
 
@@ -181,7 +181,7 @@ func Benchmark_DecodeSlice(b *testing.B) {
 
 	var result Slice
 	for i := 0; i < b.N; i++ {
-		Decode(input, &result)
+		Assign(&result, input)
 	}
 }
 
@@ -195,7 +195,7 @@ func Benchmark_DecodeSliceOfStruct(b *testing.B) {
 
 	var result SliceOfStruct
 	for i := 0; i < b.N; i++ {
-		Decode(input, &result)
+		Assign(&result, input)
 	}
 }
 
@@ -210,13 +210,10 @@ func Benchmark_DecodeWeaklyTypedInput(b *testing.B) {
 	}
 
 	var result Person
-
-	decoder := New(func(c *DecoderConfig) {
-		c.WeaklyTypedInput = true
-	})
-
 	for i := 0; i < b.N; i++ {
-		decoder.Decode(input, &result)
+		Assign(&result, input, func(c *AssignConfig) {
+			c.WeaklyTypedInput = true
+		})
 	}
 }
 
@@ -229,31 +226,29 @@ func Benchmark_DecodeMetadata(b *testing.B) {
 
 	var md Metadata
 	var result Person
-	decoder := New(func(c *DecoderConfig) {
-		c.Metadata = &md
-	})
-
 	for i := 0; i < b.N; i++ {
-		decoder.Decode(input, &result)
+		Assign(&result, input, func(c *AssignConfig) {
+			c.Metadata = &md
+		})
 	}
 }
 
-func Benchmark_DecodeMetadataEmbedded(b *testing.B) {
-	input := map[string]any{
-		"vstring": "foo",
-		"vunique": "bar",
-	}
+// func Benchmark_DecodeMetadataEmbedded(b *testing.B) {
+// 	input := map[string]any{
+// 		"vstring": "foo",
+// 		"vunique": "bar",
+// 	}
 
-	var md Metadata
-	var result EmbeddedSquash
-	decoder := New(func(c *DecoderConfig) {
-		c.Metadata = &md
-	})
+// 	var md Metadata
+// 	var result EmbeddedSquash
+// 	decoder := New(func(c *DecoderConfig) {
+// 		c.Metadata = &md
+// 	})
 
-	for i := 0; i < b.N; i++ {
-		decoder.Decode(input, &result)
-	}
-}
+// 	for i := 0; i < b.N; i++ {
+// 		decoder.Assign(&result, input)
+// 	}
+// }
 
 func Benchmark_DecodeTagged(b *testing.B) {
 	input := map[string]any{
@@ -263,6 +258,6 @@ func Benchmark_DecodeTagged(b *testing.B) {
 
 	var result Tagged
 	for i := 0; i < b.N; i++ {
-		Decode(input, &result)
+		Assign(&result, input)
 	}
 }

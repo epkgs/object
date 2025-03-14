@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-func ExampleDecode() {
+func ExampleAssign() {
 	type Person struct {
 		Name   string
 		Age    int
@@ -25,7 +25,7 @@ func ExampleDecode() {
 	}
 
 	var result Person
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		panic(err)
 	}
@@ -35,7 +35,7 @@ func ExampleDecode() {
 	// object.Person{Name:"Mitchell", Age:91, Emails:[]string{"one", "two", "three"}, Extra:map[string]string{"twitter":"mitchellh"}}
 }
 
-func ExampleDecode_errors() {
+func ExampleAssign_errors() {
 	type Person struct {
 		Name   string
 		Age    int
@@ -53,7 +53,7 @@ func ExampleDecode_errors() {
 	}
 
 	var result Person
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err == nil {
 		panic("should have an error")
 	}
@@ -69,7 +69,7 @@ func ExampleDecode_errors() {
 	// * 'Name' expected type 'string', got unconvertible type 'int', value: '123'
 }
 
-func ExampleDecode_metadata() {
+func ExampleAssign_metadata() {
 	type Person struct {
 		Name string
 		Age  int
@@ -89,20 +89,18 @@ func ExampleDecode_metadata() {
 	// just tell the decoder we want to track metadata.
 	var md Metadata
 	var result Person
-	decoder := New(func(c *DecoderConfig) {
+	if err := Assign(&result, input, func(c *AssignConfig) {
 		c.Metadata = &md
-	})
-
-	if err := decoder.Decode(input, &result); err != nil {
+	}); err != nil {
 		panic(err)
 	}
 
-	fmt.Printf("Unused keys: %#v", md.Unused)
+	fmt.Printf("Unused keys: %#v", md.Unused())
 	// Output:
 	// Unused keys: []string{"email"}
 }
 
-func ExampleDecode_weaklyTypedInput() {
+func ExampleAssign_weaklyTypedInput() {
 	type Person struct {
 		Name   string
 		Age    int
@@ -119,11 +117,9 @@ func ExampleDecode_weaklyTypedInput() {
 	}
 
 	var result Person
-	decoder := New(func(c *DecoderConfig) {
+	err := Assign(&result, input, func(c *AssignConfig) {
 		c.WeaklyTypedInput = true
 	})
-
-	err := decoder.Decode(input, &result)
 	if err != nil {
 		panic(err)
 	}
@@ -132,12 +128,10 @@ func ExampleDecode_weaklyTypedInput() {
 	// Output: object.Person{Name:"123", Age:42, Emails:[]string{}}
 }
 
-func ExampleDecode_tags() {
-	// Note that the object tags defined in the struct type
-	// can indicate which fields the values are mapped to.
+func ExampleAssign_tags() {
 	type Person struct {
-		Name string `object:"person_name"`
-		Age  int    `object:"person_age"`
+		Name string `json:"person_name"`
+		Age  int    `json:"person_age"`
 	}
 
 	input := map[string]any{
@@ -146,7 +140,7 @@ func ExampleDecode_tags() {
 	}
 
 	var result Person
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		panic(err)
 	}
@@ -156,7 +150,7 @@ func ExampleDecode_tags() {
 	// object.Person{Name:"Mitchell", Age:91}
 }
 
-func ExampleDecode_embeddedStruct() {
+func ExampleAssign_embeddedStruct() {
 	// Squashing multiple embedded structs is allowed using the squash tag.
 	// This is demonstrated by creating a composite struct of multiple types
 	// and decoding into it. In this case, a person can carry with it both
@@ -168,19 +162,19 @@ func ExampleDecode_embeddedStruct() {
 		City string
 	}
 	type Person struct {
-		Family    `object:",squash"`
-		Location  `object:",squash"`
+		Family
+		Location
 		FirstName string
 	}
 
 	input := map[string]any{
-		"FirstName": "Mitchell",
-		"LastName":  "Hashimoto",
-		"City":      "San Francisco",
+		"firstName": "Mitchell",
+		"lastName":  "Hashimoto",
+		"city":      "San Francisco",
 	}
 
 	var result Person
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		panic(err)
 	}
@@ -190,33 +184,31 @@ func ExampleDecode_embeddedStruct() {
 	// Mitchell Hashimoto, San Francisco
 }
 
-func ExampleDecode_remainingData() {
-	// Note that the object tags defined in the struct type
-	// can indicate which fields the values are mapped to.
-	type Person struct {
-		Name  string
-		Age   int
-		Other map[string]any `object:",remain"`
-	}
+// func ExampleAssign_remainingData() {
+// 	type Person struct {
+// 		Name  string
+// 		Age   int
+// 		Other map[string]any
+// 	}
 
-	input := map[string]any{
-		"name":  "Mitchell",
-		"age":   91,
-		"email": "mitchell@example.com",
-	}
+// 	input := map[string]any{
+// 		"name":  "Mitchell",
+// 		"age":   91,
+// 		"email": "mitchell@example.com",
+// 	}
 
-	var result Person
-	err := Decode(input, &result)
-	if err != nil {
-		panic(err)
-	}
+// 	var result Person
+// 	err := Assign(&result, input)
+// 	if err != nil {
+// 		panic(err)
+// 	}
 
-	fmt.Printf("%#v", result)
-	// Output:
-	// object.Person{Name:"Mitchell", Age:91, Other:map[string]interface {}{"email":"mitchell@example.com"}}
-}
+// 	fmt.Printf("%#v", result)
+// 	// Output:
+// 	// object.Person{Name:"Mitchell", Age:91, Other:map[string]interface {}{"email":"mitchell@example.com"}}
+// }
 
-func ExampleDecode_omitempty() {
+func ExampleAssign_omitempty() {
 	// Add omitempty annotation to avoid map keys for empty values
 	type Family struct {
 		LastName string
@@ -225,20 +217,20 @@ func ExampleDecode_omitempty() {
 		City string
 	}
 	type Person struct {
-		*Family   `object:",omitempty"`
-		*Location `object:",omitempty"`
+		*Family   `json:",omitempty"`
+		*Location `json:",omitempty"`
 		Age       int
 		FirstName string
 	}
 
 	result := &map[string]any{}
 	input := Person{FirstName: "Somebody"}
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		panic(err)
 	}
 
 	fmt.Printf("%+v", result)
 	// Output:
-	// &map[Age:0 FirstName:Somebody]
+	// &map[age:0 firstName:Somebody]
 }

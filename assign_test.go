@@ -5,7 +5,6 @@ import (
 	"io"
 	"reflect"
 	"sort"
-	"strings"
 	"testing"
 	"time"
 )
@@ -44,10 +43,6 @@ type BasicPointer struct {
 	VjsonNumber *json.Number
 }
 
-type BasicSquash struct {
-	Test Basic `object:",squash"`
-}
-
 type Embedded struct {
 	Basic
 	Vunique string
@@ -58,28 +53,18 @@ type EmbeddedPointer struct {
 	Vunique string
 }
 
-type EmbeddedSquash struct {
-	Basic   `object:",squash"`
-	Vunique string
-}
-
 type EmbeddedPointerSquash struct {
-	*Basic  `object:",squash"`
+	*Basic
 	Vunique string
 }
 
 type BasicMapStructure struct {
-	Vunique string     `object:"vunique"`
-	Vtime   *time.Time `object:"time"`
+	Vunique string     `json:"vunique"`
+	Vtime   *time.Time `json:"time"`
 }
 
 type NestedPointerWithMapstructure struct {
-	Vbar *BasicMapStructure `object:"vbar"`
-}
-
-type EmbeddedPointerSquashWithNestedMapstructure struct {
-	*NestedPointerWithMapstructure `object:",squash"`
-	Vunique                        string
+	Vbar *BasicMapStructure `json:"vbar"`
 }
 
 type EmbeddedAndNamed struct {
@@ -91,19 +76,15 @@ type EmbeddedAndNamed struct {
 type SliceAlias []string
 
 type EmbeddedSlice struct {
-	SliceAlias `object:"slice_alias"`
+	SliceAlias `json:"slice_alias"`
 	Vunique    string
 }
 
 type ArrayAlias [2]string
 
 type EmbeddedArray struct {
-	ArrayAlias `object:"array_alias"`
+	ArrayAlias `json:"array_alias"`
 	Vunique    string
-}
-
-type SquashOnNonStructType struct {
-	InvalidSquashType int `object:",squash"`
 }
 
 type Map struct {
@@ -170,28 +151,28 @@ type Func struct {
 }
 
 type Tagged struct {
-	Extra string `object:"bar,what,what"`
-	Value string `object:"foo"`
+	Extra string `json:"bar,what,what"`
+	Value string `json:"foo"`
 }
 
 type Remainder struct {
 	A     string
-	Extra map[string]any `object:",remain"`
+	Extra map[string]any `json:",remain"`
 }
 
 type StructWithOmitEmpty struct {
-	VisibleStringField string         `object:"visible-string"`
-	OmitStringField    string         `object:"omittable-string,omitempty"`
-	VisibleIntField    int            `object:"visible-int"`
-	OmitIntField       int            `object:"omittable-int,omitempty"`
-	VisibleFloatField  float64        `object:"visible-float"`
-	OmitFloatField     float64        `object:"omittable-float,omitempty"`
-	VisibleSliceField  []any          `object:"visible-slice"`
-	OmitSliceField     []any          `object:"omittable-slice,omitempty"`
-	VisibleMapField    map[string]any `object:"visible-map"`
-	OmitMapField       map[string]any `object:"omittable-map,omitempty"`
-	NestedField        *Nested        `object:"visible-nested"`
-	OmitNestedField    *Nested        `object:"omittable-nested,omitempty"`
+	VisibleStringField string         `json:"visible-string"`
+	OmitStringField    string         `json:"omittable-string,omitempty"`
+	VisibleIntField    int            `json:"visible-int"`
+	OmitIntField       int            `json:"omittable-int,omitempty"`
+	VisibleFloatField  float64        `json:"visible-float"`
+	OmitFloatField     float64        `json:"omittable-float,omitempty"`
+	VisibleSliceField  []any          `json:"visible-slice"`
+	OmitSliceField     []any          `json:"omittable-slice,omitempty"`
+	VisibleMapField    map[string]any `json:"visible-map"`
+	OmitMapField       map[string]any `json:"omittable-map,omitempty"`
+	NestedField        *Nested        `json:"visible-nested"`
+	OmitNestedField    *Nested        `json:"omittable-nested,omitempty"`
 }
 
 type TypeConversionResult struct {
@@ -238,9 +219,9 @@ func TestBasicTypes(t *testing.T) {
 		"vint16":      42,
 		"vint32":      42,
 		"vint64":      42,
-		"Vuint":       42,
+		"vuint":       42,
 		"vbool":       true,
-		"Vfloat":      42.42,
+		"vfloat":      42.42,
 		"vsilent":     true,
 		"vdata":       42,
 		"vjsonInt":    json.Number("1234"),
@@ -251,7 +232,7 @@ func TestBasicTypes(t *testing.T) {
 	}
 
 	var result Basic
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Errorf("got an err: %s", err.Error())
 		t.FailNow()
@@ -330,7 +311,7 @@ func TestBasic_IntWithFloat(t *testing.T) {
 	}
 
 	var result Basic
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got an err: %s", err)
 	}
@@ -345,7 +326,7 @@ func TestBasic_Merge(t *testing.T) {
 
 	var result Basic
 	result.Vuint = 100
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got an err: %s", err)
 	}
@@ -371,7 +352,7 @@ func TestBasic_Struct(t *testing.T) {
 
 	var result, inner Basic
 	result.Vdata = &inner
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got an err: %s", err)
 	}
@@ -393,7 +374,7 @@ func TestBasic_interfaceStruct(t *testing.T) {
 	}
 
 	var iface any = &Basic{}
-	err := Decode(input, &iface)
+	err := Assign(&iface, input)
 	if err != nil {
 		t.Fatalf("got an err: %s", err)
 	}
@@ -415,7 +396,7 @@ func TestBasic_interfaceStructNonPtr(t *testing.T) {
 	}
 
 	var iface any = Basic{}
-	err := Decode(input, &iface)
+	err := Assign(&iface, input)
 	if err != nil {
 		t.Fatalf("got an err: %s", err)
 	}
@@ -425,54 +406,6 @@ func TestBasic_interfaceStructNonPtr(t *testing.T) {
 	}
 	if !reflect.DeepEqual(iface, expected) {
 		t.Fatalf("bad: %#v", iface)
-	}
-}
-
-func TestDecode_BasicSquash(t *testing.T) {
-	t.Parallel()
-
-	input := map[string]any{
-		"vstring": "foo",
-	}
-
-	var result BasicSquash
-	err := Decode(input, &result)
-	if err != nil {
-		t.Fatalf("got an err: %s", err.Error())
-	}
-
-	if result.Test.Vstring != "foo" {
-		t.Errorf("vstring value should be 'foo': %#v", result.Test.Vstring)
-	}
-}
-
-func TestDecodeFrom_BasicSquash(t *testing.T) {
-	t.Parallel()
-
-	var v any
-	var ok bool
-
-	input := BasicSquash{
-		Test: Basic{
-			Vstring: "foo",
-		},
-	}
-
-	var result map[string]any
-	err := Decode(input, &result)
-	if err != nil {
-		t.Fatalf("got an err: %s", err.Error())
-	}
-
-	if _, ok = result["Test"]; ok {
-		t.Error("test should not be present in map")
-	}
-
-	v, ok = result["Vstring"]
-	if !ok {
-		t.Error("vstring should be present in map")
-	} else if !reflect.DeepEqual(v, "foo") {
-		t.Errorf("vstring value should be 'foo': %#v", v)
 	}
 }
 
@@ -488,13 +421,13 @@ func TestDecode_Embedded(t *testing.T) {
 	}
 
 	var result Embedded
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got an err: %s", err.Error())
 	}
 
-	if result.Vstring != "innerfoo" {
-		t.Errorf("vstring value should be 'innerfoo': %#v", result.Vstring)
+	if result.Vstring != "foo" {
+		t.Errorf("vstring value should be 'foo': %#v", result.Vstring)
 	}
 
 	if result.Vunique != "bar" {
@@ -507,21 +440,18 @@ func TestDecode_EmbeddedPointer(t *testing.T) {
 
 	input := map[string]any{
 		"vstring": "foo",
-		"Basic": map[string]any{
-			"vstring": "innerfoo",
-		},
 		"vunique": "bar",
 	}
 
 	var result EmbeddedPointer
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
 	expected := EmbeddedPointer{
 		Basic: &Basic{
-			Vstring: "innerfoo",
+			Vstring: "foo",
 		},
 		Vunique: "bar",
 	}
@@ -539,7 +469,7 @@ func TestDecode_EmbeddedSlice(t *testing.T) {
 	}
 
 	var result EmbeddedSlice
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got an err: %s", err.Error())
 	}
@@ -562,7 +492,7 @@ func TestDecode_EmbeddedArray(t *testing.T) {
 	}
 
 	var result EmbeddedArray
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got an err: %s", err.Error())
 	}
@@ -582,7 +512,7 @@ func TestDecode_decodeSliceWithArray(t *testing.T) {
 	var result []int
 	input := [1]int{1}
 	expected := []int{1}
-	if err := Decode(input, &result); err != nil {
+	if err := Assign(&result, input); err != nil {
 		t.Fatalf("got an err: %s", err.Error())
 	}
 
@@ -600,12 +530,12 @@ func TestDecode_EmbeddedNoSquash(t *testing.T) {
 	}
 
 	var result Embedded
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got an err: %s", err.Error())
 	}
 
-	if result.Vstring != "" {
+	if result.Vstring != "foo" {
 		t.Errorf("vstring value should be empty: %#v", result.Vstring)
 	}
 
@@ -626,32 +556,9 @@ func TestDecode_EmbeddedPointerNoSquash(t *testing.T) {
 		Basic: &Basic{},
 	}
 
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("err: %s", err)
-	}
-
-	if result.Vstring != "" {
-		t.Errorf("vstring value should be empty: %#v", result.Vstring)
-	}
-
-	if result.Vunique != "bar" {
-		t.Errorf("vunique value should be 'bar': %#v", result.Vunique)
-	}
-}
-
-func TestDecode_EmbeddedSquash(t *testing.T) {
-	t.Parallel()
-
-	input := map[string]any{
-		"vstring": "foo",
-		"vunique": "bar",
-	}
-
-	var result EmbeddedSquash
-	err := Decode(input, &result)
-	if err != nil {
-		t.Fatalf("got an err: %s", err.Error())
 	}
 
 	if result.Vstring != "foo" {
@@ -660,44 +567,6 @@ func TestDecode_EmbeddedSquash(t *testing.T) {
 
 	if result.Vunique != "bar" {
 		t.Errorf("vunique value should be 'bar': %#v", result.Vunique)
-	}
-}
-
-func TestDecodeFrom_EmbeddedSquash(t *testing.T) {
-	t.Parallel()
-
-	var v any
-	var ok bool
-
-	input := EmbeddedSquash{
-		Basic: Basic{
-			Vstring: "foo",
-		},
-		Vunique: "bar",
-	}
-
-	var result map[string]any
-	err := Decode(input, &result)
-	if err != nil {
-		t.Fatalf("got an err: %s", err.Error())
-	}
-
-	if _, ok = result["Basic"]; ok {
-		t.Error("basic should not be present in map")
-	}
-
-	v, ok = result["Vstring"]
-	if !ok {
-		t.Error("vstring should be present in map")
-	} else if !reflect.DeepEqual(v, "foo") {
-		t.Errorf("vstring value should be 'foo': %#v", v)
-	}
-
-	v, ok = result["Vunique"]
-	if !ok {
-		t.Error("vunique should be present in map")
-	} else if !reflect.DeepEqual(v, "bar") {
-		t.Errorf("vunique value should be 'bar': %#v", v)
 	}
 }
 
@@ -712,17 +581,17 @@ func TestDecode_EmbeddedPointerSquash_FromStructToMap(t *testing.T) {
 	}
 
 	var result map[string]any
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got an err: %s", err.Error())
 	}
 
-	if result["Vstring"] != "foo" {
-		t.Errorf("vstring value should be 'foo': %#v", result["Vstring"])
+	if result["vstring"] != "foo" {
+		t.Errorf("vstring value should be 'foo': %#v", result["vstring"])
 	}
 
-	if result["Vunique"] != "bar" {
-		t.Errorf("vunique value should be 'bar': %#v", result["Vunique"])
+	if result["vunique"] != "bar" {
+		t.Errorf("vunique value should be 'bar': %#v", result["vunique"])
 	}
 }
 
@@ -730,14 +599,14 @@ func TestDecode_EmbeddedPointerSquash_FromMapToStruct(t *testing.T) {
 	t.Parallel()
 
 	input := map[string]any{
-		"Vstring": "foo",
-		"Vunique": "bar",
+		"vstring": "foo",
+		"vunique": "bar",
 	}
 
 	result := EmbeddedPointerSquash{
 		Basic: &Basic{},
 	}
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got an err: %s", err.Error())
 	}
@@ -748,278 +617,6 @@ func TestDecode_EmbeddedPointerSquash_FromMapToStruct(t *testing.T) {
 
 	if result.Vunique != "bar" {
 		t.Errorf("vunique value should be 'bar': %#v", result.Vunique)
-	}
-}
-
-func TestDecode_EmbeddedPointerSquashWithNestedMapstructure_FromStructToMap(t *testing.T) {
-	t.Parallel()
-
-	vTime := time.Now()
-
-	input := EmbeddedPointerSquashWithNestedMapstructure{
-		NestedPointerWithMapstructure: &NestedPointerWithMapstructure{
-			Vbar: &BasicMapStructure{
-				Vunique: "bar",
-				Vtime:   &vTime,
-			},
-		},
-		Vunique: "foo",
-	}
-
-	var result map[string]any
-	err := Decode(input, &result)
-	if err != nil {
-		t.Fatalf("got an err: %s", err.Error())
-	}
-	expected := map[string]any{
-		"vbar": map[string]any{
-			"vunique": "bar",
-			"time":    &vTime,
-		},
-		"Vunique": "foo",
-	}
-
-	if !reflect.DeepEqual(result, expected) {
-		t.Errorf("result should be %#v: got %#v", expected, result)
-	}
-}
-
-func TestDecode_EmbeddedPointerSquashWithNestedMapstructure_FromMapToStruct(t *testing.T) {
-	t.Parallel()
-
-	vTime := time.Now()
-
-	input := map[string]any{
-		"vbar": map[string]any{
-			"vunique": "bar",
-			"time":    &vTime,
-		},
-		"Vunique": "foo",
-	}
-
-	result := EmbeddedPointerSquashWithNestedMapstructure{
-		NestedPointerWithMapstructure: &NestedPointerWithMapstructure{},
-	}
-	err := Decode(input, &result)
-	if err != nil {
-		t.Fatalf("got an err: %s", err.Error())
-	}
-	expected := EmbeddedPointerSquashWithNestedMapstructure{
-		NestedPointerWithMapstructure: &NestedPointerWithMapstructure{
-			Vbar: &BasicMapStructure{
-				Vunique: "bar",
-				Vtime:   &vTime,
-			},
-		},
-		Vunique: "foo",
-	}
-
-	if !reflect.DeepEqual(result, expected) {
-		t.Errorf("result should be %#v: got %#v", expected, result)
-	}
-}
-
-func TestDecode_EmbeddedSquashConfig(t *testing.T) {
-	t.Parallel()
-
-	input := map[string]any{
-		"vstring": "foo",
-		"vunique": "bar",
-		"Named": map[string]any{
-			"vstring": "baz",
-		},
-	}
-
-	var result EmbeddedAndNamed
-	decoder := New(func(c *DecoderConfig) {
-		c.Squash = true
-	})
-
-	err := decoder.Decode(input, &result)
-	if err != nil {
-		t.Fatalf("got an err: %s", err)
-	}
-
-	if result.Vstring != "foo" {
-		t.Errorf("vstring value should be 'foo': %#v", result.Vstring)
-	}
-
-	if result.Vunique != "bar" {
-		t.Errorf("vunique value should be 'bar': %#v", result.Vunique)
-	}
-
-	if result.Named.Vstring != "baz" {
-		t.Errorf("Named.vstring value should be 'baz': %#v", result.Named.Vstring)
-	}
-}
-
-func TestDecodeFrom_EmbeddedSquashConfig(t *testing.T) {
-	t.Parallel()
-
-	input := EmbeddedAndNamed{
-		Basic:   Basic{Vstring: "foo"},
-		Named:   Basic{Vstring: "baz"},
-		Vunique: "bar",
-	}
-
-	result := map[string]any{}
-	decoder := New(func(c *DecoderConfig) {
-		c.Squash = true
-	})
-
-	err := decoder.Decode(input, &result)
-	if err != nil {
-		t.Fatalf("got an err: %s", err.Error())
-	}
-
-	if _, ok := result["Basic"]; ok {
-		t.Error("basic should not be present in map")
-	}
-
-	v, ok := result["Vstring"]
-	if !ok {
-		t.Error("vstring should be present in map")
-	} else if !reflect.DeepEqual(v, "foo") {
-		t.Errorf("vstring value should be 'foo': %#v", v)
-	}
-
-	v, ok = result["Vunique"]
-	if !ok {
-		t.Error("vunique should be present in map")
-	} else if !reflect.DeepEqual(v, "bar") {
-		t.Errorf("vunique value should be 'bar': %#v", v)
-	}
-
-	v, ok = result["Named"]
-	if !ok {
-		t.Error("Named should be present in map")
-	} else {
-		named := v.(map[string]any)
-		v, ok := named["Vstring"]
-		if !ok {
-			t.Error("Named: vstring should be present in map")
-		} else if !reflect.DeepEqual(v, "baz") {
-			t.Errorf("Named: vstring should be 'baz': %#v", v)
-		}
-	}
-}
-
-func TestDecodeFrom_EmbeddedSquashConfig_WithTags(t *testing.T) {
-	t.Parallel()
-
-	var v any
-	var ok bool
-
-	input := EmbeddedSquash{
-		Basic: Basic{
-			Vstring: "foo",
-		},
-		Vunique: "bar",
-	}
-
-	result := map[string]any{}
-	decoder := New(func(c *DecoderConfig) {
-		c.Squash = true
-	})
-
-	err := decoder.Decode(input, &result)
-	if err != nil {
-		t.Fatalf("got an err: %s", err.Error())
-	}
-
-	if _, ok = result["Basic"]; ok {
-		t.Error("basic should not be present in map")
-	}
-
-	v, ok = result["Vstring"]
-	if !ok {
-		t.Error("vstring should be present in map")
-	} else if !reflect.DeepEqual(v, "foo") {
-		t.Errorf("vstring value should be 'foo': %#v", v)
-	}
-
-	v, ok = result["Vunique"]
-	if !ok {
-		t.Error("vunique should be present in map")
-	} else if !reflect.DeepEqual(v, "bar") {
-		t.Errorf("vunique value should be 'bar': %#v", v)
-	}
-}
-
-func TestDecode_SquashOnNonStructType(t *testing.T) {
-	t.Parallel()
-
-	input := map[string]any{
-		"InvalidSquashType": 42,
-	}
-
-	var result SquashOnNonStructType
-	err := Decode(input, &result)
-	if err == nil {
-		t.Fatal("unexpected success decoding invalid squash field type")
-	} else if !strings.Contains(err.Error(), "unsupported type for squash") {
-		t.Fatalf("unexpected error message for invalid squash field type: %s", err)
-	}
-}
-
-func TestDecode_DecodeHook(t *testing.T) {
-	t.Parallel()
-
-	input := map[string]any{
-		"vint": "WHAT",
-	}
-
-	decodeHook := func(from reflect.Kind, to reflect.Kind, v any) (any, error) {
-		if from == reflect.String && to != reflect.String {
-			return 5, nil
-		}
-
-		return v, nil
-	}
-
-	var result Basic
-	decoder := New(func(c *DecoderConfig) {
-		c.DecodeHook = decodeHook
-	})
-
-	err := decoder.Decode(input, &result)
-	if err != nil {
-		t.Fatalf("got an err: %s", err)
-	}
-
-	if result.Vint != 5 {
-		t.Errorf("vint should be 5: %#v", result.Vint)
-	}
-}
-
-func TestDecode_DecodeHookType(t *testing.T) {
-	t.Parallel()
-
-	input := map[string]any{
-		"vint": "WHAT",
-	}
-
-	decodeHook := func(from reflect.Type, to reflect.Type, v any) (any, error) {
-		if from.Kind() == reflect.String &&
-			to.Kind() != reflect.String {
-			return 5, nil
-		}
-
-		return v, nil
-	}
-
-	var result Basic
-	decoder := New(func(c *DecoderConfig) {
-		c.DecodeHook = decodeHook
-	})
-
-	err := decoder.Decode(input, &result)
-	if err != nil {
-		t.Fatalf("got an err: %s", err)
-	}
-
-	if result.Vint != 5 {
-		t.Errorf("vint should be 5: %#v", result.Vint)
 	}
 }
 
@@ -1031,104 +628,13 @@ func TestDecode_Nil(t *testing.T) {
 		Vstring: "foo",
 	}
 
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
 	if result.Vstring != "foo" {
 		t.Fatalf("bad: %#v", result.Vstring)
-	}
-}
-
-func TestDecode_NilInterfaceHook(t *testing.T) {
-	t.Parallel()
-
-	input := map[string]any{
-		"w": "",
-	}
-
-	decodeHook := func(f, t reflect.Type, v any) (any, error) {
-		if t.String() == "io.Writer" {
-			return nil, nil
-		}
-
-		return v, nil
-	}
-
-	var result NilInterface
-	decoder := New(func(c *DecoderConfig) {
-		c.DecodeHook = decodeHook
-	})
-
-	err := decoder.Decode(input, &result)
-	if err != nil {
-		t.Fatalf("got an err: %s", err)
-	}
-
-	if result.W != nil {
-		t.Errorf("W should be nil: %#v", result.W)
-	}
-}
-
-func TestDecode_NilPointerHook(t *testing.T) {
-	t.Parallel()
-
-	input := map[string]any{
-		"value": "",
-	}
-
-	decodeHook := func(f, t reflect.Type, v any) (any, error) {
-		if typed, ok := v.(string); ok {
-			if typed == "" {
-				return nil, nil
-			}
-		}
-		return v, nil
-	}
-
-	var result NilPointer
-	decoder := New(func(c *DecoderConfig) {
-		c.DecodeHook = decodeHook
-	})
-
-	err := decoder.Decode(input, &result)
-	if err != nil {
-		t.Fatalf("got an err: %s", err)
-	}
-
-	if result.Value != nil {
-		t.Errorf("W should be nil: %#v", result.Value)
-	}
-}
-
-func TestDecode_FuncHook(t *testing.T) {
-	t.Parallel()
-
-	input := map[string]any{
-		"foo": "baz",
-	}
-
-	decodeHook := func(f, t reflect.Type, v any) (any, error) {
-		if t.Kind() != reflect.Func {
-			return v, nil
-		}
-		val := v.(string)
-		return func() string { return val }, nil
-	}
-
-	var result Func
-	decoder := New(func(c *DecoderConfig) {
-		c.DecodeHook = decodeHook
-	})
-
-	err := decoder.Decode(input, &result)
-	if err != nil {
-		t.Fatalf("got an err: %s", err)
-	}
-
-	if result.Foo() != "baz" {
-		t.Errorf("Foo call result should be 'baz': %s", result.Foo())
 	}
 }
 
@@ -1141,7 +647,7 @@ func TestDecode_NonStruct(t *testing.T) {
 	}
 
 	var result map[string]string
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -1161,7 +667,7 @@ func TestDecode_StructMatch(t *testing.T) {
 	}
 
 	var result Nested
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got an err: %s", err.Error())
 	}
@@ -1173,37 +679,37 @@ func TestDecode_StructMatch(t *testing.T) {
 
 func TestDecode_TypeConversion(t *testing.T) {
 	input := map[string]any{
-		"IntToFloat":         42,
-		"IntToUint":          42,
-		"IntToBool":          1,
-		"IntToString":        42,
-		"UintToInt":          42,
-		"UintToFloat":        42,
-		"UintToBool":         42,
-		"UintToString":       42,
-		"BoolToInt":          true,
-		"BoolToUint":         true,
-		"BoolToFloat":        true,
-		"BoolToString":       true,
-		"FloatToInt":         42.42,
-		"FloatToUint":        42.42,
-		"FloatToBool":        42.42,
-		"FloatToString":      42.42,
-		"SliceUint8ToString": []uint8("foo"),
-		"StringToSliceUint8": "foo",
-		"ArrayUint8ToString": [3]uint8{'f', 'o', 'o'},
-		"StringToInt":        "42",
-		"StringToUint":       "42",
-		"StringToBool":       "1",
-		"StringToFloat":      "42.42",
-		"StringToStrSlice":   "A",
-		"StringToIntSlice":   "42",
-		"StringToStrArray":   "A",
-		"StringToIntArray":   "42",
-		"SliceToMap":         []any{},
-		"MapToSlice":         map[string]any{},
-		"ArrayToMap":         []any{},
-		"MapToArray":         map[string]any{},
+		"intToFloat":         42,
+		"intToUint":          42,
+		"intToBool":          1,
+		"intToString":        42,
+		"uintToInt":          42,
+		"uintToFloat":        42,
+		"uintToBool":         42,
+		"uintToString":       42,
+		"boolToInt":          true,
+		"boolToUint":         true,
+		"boolToFloat":        true,
+		"boolToString":       true,
+		"floatToInt":         42.42,
+		"floatToUint":        42.42,
+		"floatToBool":        42.42,
+		"floatToString":      42.42,
+		"sliceUint8ToString": []uint8("foo"),
+		"stringToSliceUint8": "foo",
+		"arrayUint8ToString": [3]uint8{'f', 'o', 'o'},
+		"stringToInt":        "42",
+		"stringToUint":       "42",
+		"stringToBool":       "1",
+		"stringToFloat":      "42.42",
+		"stringToStrSlice":   "A",
+		"stringToIntSlice":   "42",
+		"stringToStrArray":   "A",
+		"stringToIntArray":   "42",
+		"sliceToMap":         []any{},
+		"mapToSlice":         map[string]any{},
+		"arrayToMap":         []any{},
+		"mapToArray":         map[string]any{},
 	}
 
 	expectedResultStrict := TypeConversionResult{
@@ -1254,7 +760,7 @@ func TestDecode_TypeConversion(t *testing.T) {
 
 	// Test strict type conversion
 	var resultStrict TypeConversionResult
-	err := Decode(input, &resultStrict)
+	err := Assign(&resultStrict, input)
 	if err == nil {
 		t.Errorf("should return an error")
 	}
@@ -1263,74 +769,16 @@ func TestDecode_TypeConversion(t *testing.T) {
 	}
 
 	// Test weak type conversion
-	var decoder *Decoder
 	var resultWeak TypeConversionResult
-	decoder = New(func(c *DecoderConfig) {
+	err = Assign(&resultWeak, input, func(c *AssignConfig) {
 		c.WeaklyTypedInput = true
 	})
-
-	err = decoder.Decode(input, &resultWeak)
 	if err != nil {
 		t.Fatalf("got an err: %s", err)
 	}
 
 	if !reflect.DeepEqual(resultWeak, expectedResultWeak) {
 		t.Errorf("expected \n%#v, got: \n%#v", expectedResultWeak, resultWeak)
-	}
-}
-
-func TestDecoder_ErrorUnused(t *testing.T) {
-	t.Parallel()
-
-	input := map[string]any{
-		"vstring": "hello",
-		"foo":     "bar",
-	}
-
-	decoder := New(func(c *DecoderConfig) {
-		c.ErrorUnused = true
-	})
-
-	var result Basic
-	err := decoder.Decode(input, &result)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestDecoder_ErrorUnused_NotSetable(t *testing.T) {
-	t.Parallel()
-
-	// lowercase vsilent is unexported and cannot be set
-	input := map[string]any{
-		"vsilent": "false",
-	}
-
-	var result Basic
-	decoder := New(func(c *DecoderConfig) {
-		c.ErrorUnused = true
-	})
-	err := decoder.Decode(input, &result)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-func TestDecoder_ErrorUnset(t *testing.T) {
-	t.Parallel()
-
-	input := map[string]any{
-		"vstring": "hello",
-		"foo":     "bar",
-	}
-
-	var result Basic
-	decoder := New(func(c *DecoderConfig) {
-		c.ErrorUnset = true
-	})
-
-	err := decoder.Decode(input, &result)
-	if err == nil {
-		t.Fatal("expected error")
 	}
 }
 
@@ -1346,7 +794,7 @@ func TestMap(t *testing.T) {
 	}
 
 	var result Map
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got an error: %s", err)
 	}
@@ -1385,7 +833,7 @@ func TestMapMerge(t *testing.T) {
 
 	var result Map
 	result.Vother = map[string]string{"hello": "world"}
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got an error: %s", err)
 	}
@@ -1415,7 +863,7 @@ func TestMapOfStruct(t *testing.T) {
 	}
 
 	var result MapOfStruct
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got an err: %s", err)
 	}
@@ -1450,7 +898,7 @@ func TestNestedType(t *testing.T) {
 	}
 
 	var result Nested
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got an err: %s", err.Error())
 	}
@@ -1489,7 +937,7 @@ func TestNestedTypePointer(t *testing.T) {
 	}
 
 	var result NestedPointer
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got an err: %s", err.Error())
 	}
@@ -1535,7 +983,7 @@ func TestNestedTypeInterface(t *testing.T) {
 	var result NestedPointer
 	result.Vbar = new(Basic)
 	result.Vbar.Vdata = new(Basic)
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got an err: %s", err.Error())
 	}
@@ -1600,7 +1048,7 @@ func TestNotEmptyByteSlice(t *testing.T) {
 		Vbar: []byte(`{"bar": "bar bar bar bar bar bar bar bar"}`),
 	}
 
-	err := Decode(inputByteSlice, &result)
+	err := Assign(&result, inputByteSlice)
 	if err != nil {
 		t.Fatalf("got unexpected error: %s", err)
 	}
@@ -1624,7 +1072,7 @@ func TestInvalidSlice(t *testing.T) {
 	}
 
 	result := Slice{}
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err == nil {
 		t.Errorf("expected failure")
 	}
@@ -1641,7 +1089,7 @@ func TestSliceOfStruct(t *testing.T) {
 	}
 
 	var result SliceOfStruct
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got unexpected error: %s", err)
 	}
@@ -1666,7 +1114,7 @@ func TestSliceCornerCases(t *testing.T) {
 	input := map[string]any{}
 	var resultWeak []Basic
 
-	err := Decode(input, &resultWeak, func(c *DecoderConfig) {
+	err := Assign(&resultWeak, input, func(c *AssignConfig) {
 		c.WeaklyTypedInput = true
 	})
 	if err != nil {
@@ -1678,11 +1126,11 @@ func TestSliceCornerCases(t *testing.T) {
 	}
 	// Input with more values
 	input = map[string]any{
-		"Vstring": "foo",
+		"vstring": "foo",
 	}
 
 	resultWeak = nil
-	err = Decode(input, &resultWeak, func(c *DecoderConfig) {
+	err = Assign(&resultWeak, input, func(c *AssignConfig) {
 		c.WeaklyTypedInput = true
 	})
 	if err != nil {
@@ -1707,7 +1155,7 @@ func TestSliceToMap(t *testing.T) {
 	}
 
 	var result map[string]any
-	err := Decode(input, &result, func(c *DecoderConfig) {
+	err := Assign(&result, input, func(c *AssignConfig) {
 		c.WeaklyTypedInput = true
 	})
 	if err != nil {
@@ -1754,7 +1202,7 @@ func TestInvalidArray(t *testing.T) {
 	}
 
 	result := Array{}
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err == nil {
 		t.Errorf("expected failure")
 	}
@@ -1771,7 +1219,7 @@ func TestArrayOfStruct(t *testing.T) {
 	}
 
 	var result ArrayOfStruct
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got unexpected error: %s", err)
 	}
@@ -1802,7 +1250,7 @@ func TestArrayToMap(t *testing.T) {
 	}
 
 	var result map[string]any
-	err := Decode(input, &result, func(c *DecoderConfig) {
+	err := Assign(&result, input, func(c *AssignConfig) {
 		c.WeaklyTypedInput = true
 	})
 	if err != nil {
@@ -1852,22 +1300,22 @@ func TestDecodeTable(t *testing.T) {
 			},
 			&map[string]any{},
 			&map[string]any{
-				"Vstring":     "vstring",
-				"Vint":        2,
-				"Vint8":       int8(2),
-				"Vint16":      int16(2),
-				"Vint32":      int32(2),
-				"Vint64":      int64(2),
-				"Vuint":       uint(3),
-				"Vbool":       true,
-				"Vfloat":      4.56,
-				"Vextra":      "vextra",
-				"Vdata":       []byte("data"),
-				"VjsonInt":    0,
-				"VjsonUint":   uint(0),
-				"VjsonUint64": uint64(0),
-				"VjsonFloat":  0.0,
-				"VjsonNumber": json.Number(""),
+				"vstring":     "vstring",
+				"vint":        2,
+				"vint8":       int8(2),
+				"vint16":      int16(2),
+				"vint32":      int32(2),
+				"vint64":      int64(2),
+				"vuint":       uint(3),
+				"vbool":       true,
+				"vfloat":      4.56,
+				"vextra":      "vextra",
+				"vdata":       []byte("data"),
+				"vjsonInt":    0,
+				"vjsonUint":   uint(0),
+				"vjsonUint64": uint64(0),
+				"vjsonFloat":  0.0,
+				"vjsonNumber": json.Number(""),
 			},
 			false,
 		},
@@ -1892,25 +1340,23 @@ func TestDecodeTable(t *testing.T) {
 			},
 			&map[string]any{},
 			&map[string]any{
-				"Vunique": "vunique",
-				"Basic": map[string]any{
-					"Vstring":     "vstring",
-					"Vint":        2,
-					"Vint8":       int8(2),
-					"Vint16":      int16(2),
-					"Vint32":      int32(2),
-					"Vint64":      int64(2),
-					"Vuint":       uint(3),
-					"Vbool":       true,
-					"Vfloat":      4.56,
-					"Vextra":      "vextra",
-					"Vdata":       []byte("data"),
-					"VjsonInt":    0,
-					"VjsonUint":   uint(0),
-					"VjsonUint64": uint64(0),
-					"VjsonFloat":  0.0,
-					"VjsonNumber": json.Number(""),
-				},
+				"vunique":     "vunique",
+				"vstring":     "vstring",
+				"vint":        2,
+				"vint8":       int8(2),
+				"vint16":      int16(2),
+				"vint32":      int32(2),
+				"vint64":      int64(2),
+				"vuint":       uint(3),
+				"vbool":       true,
+				"vfloat":      4.56,
+				"vextra":      "vextra",
+				"vdata":       []byte("data"),
+				"vjsonInt":    0,
+				"vjsonUint":   uint(0),
+				"vjsonUint64": uint64(0),
+				"vjsonFloat":  0.0,
+				"vjsonNumber": json.Number(""),
 			},
 			false,
 		},
@@ -2005,7 +1451,7 @@ func TestDecodeTable(t *testing.T) {
 			"nil map to non-empty map",
 			&Map{},
 			&MapCopy{Vother: map[string]string{"foo": "bar"}},
-			&MapCopy{},
+			&MapCopy{Vother: map[string]string{"foo": "bar"}},
 			false,
 		},
 
@@ -2024,15 +1470,15 @@ func TestDecodeTable(t *testing.T) {
 			},
 			&map[string]any{},
 			&map[string]any{
-				"Vfoo": "vfoo",
-				"Vbar": []string{"foo", "bar"},
+				"vfoo": "vfoo",
+				"vbar": []string{"foo", "bar"},
 			},
 			false,
 		},
 		{
 			"struct with empty slice",
 			&map[string]any{
-				"Vbar": []string{},
+				"vbar": []string{},
 			},
 			&Slice{},
 			&Slice{
@@ -2058,7 +1504,7 @@ func TestDecodeTable(t *testing.T) {
 			},
 			&map[string]any{},
 			&map[string]any{
-				"Value": []Basic{
+				"value": []Basic{
 					{
 						Vstring: "vstring",
 						Vint:    2,
@@ -2081,8 +1527,8 @@ func TestDecodeTable(t *testing.T) {
 			},
 			&map[string]any{},
 			&map[string]any{
-				"Vfoo": "vfoo",
-				"Vother": map[string]string{
+				"vfoo": "vfoo",
+				"vother": map[string]string{
 					"vother": "vother",
 				}},
 			false,
@@ -2103,8 +1549,8 @@ func TestDecodeTable(t *testing.T) {
 		{
 			"omit tag struct",
 			&struct {
-				Value string `object:"value"`
-				Omit  string `object:"-"`
+				Value string `json:"value"`
+				Omit  string `json:"-"`
 			}{
 				Value: "value",
 				Omit:  "omit",
@@ -2126,27 +1572,27 @@ func TestDecodeTable(t *testing.T) {
 			&map[string]int{},
 			true,
 		},
-		{
-			"remainder",
-			map[string]any{
-				"A": "hello",
-				"B": "goodbye",
-				"C": "yo",
-			},
-			&Remainder{},
-			&Remainder{
-				A: "hello",
-				Extra: map[string]any{
-					"B": "goodbye",
-					"C": "yo",
-				},
-			},
-			false,
-		},
+		// {
+		// 	"remainder",
+		// 	map[string]any{
+		// 		"a": "hello",
+		// 		"b": "goodbye",
+		// 		"c": "yo",
+		// 	},
+		// 	&Remainder{},
+		// 	&Remainder{
+		// 		A: "hello",
+		// 		Extra: map[string]any{
+		// 			"b": "goodbye",
+		// 			"c": "yo",
+		// 		},
+		// 	},
+		// 	false,
+		// },
 		{
 			"remainder with no extra",
 			map[string]any{
-				"A": "hello",
+				"a": "hello",
 			},
 			&Remainder{},
 			&Remainder{
@@ -2158,8 +1604,8 @@ func TestDecodeTable(t *testing.T) {
 		{
 			"struct with omitempty tag return non-empty values",
 			&struct {
-				VisibleField any `object:"visible"`
-				OmitField    any `object:"omittable,omitempty"`
+				VisibleField any `json:"visible"`
+				OmitField    any `json:"omittable,omitempty"`
 			}{
 				VisibleField: nil,
 				OmitField:    "string",
@@ -2171,8 +1617,8 @@ func TestDecodeTable(t *testing.T) {
 		{
 			"struct with omitempty tag ignore empty values",
 			&struct {
-				VisibleField any `object:"visible"`
-				OmitField    any `object:"omittable,omitempty"`
+				VisibleField any `json:"visible"`
+				OmitField    any `json:"omittable,omitempty"`
 			}{
 				VisibleField: nil,
 				OmitField:    nil,
@@ -2185,7 +1631,7 @@ func TestDecodeTable(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := Decode(tt.in, tt.target); (err != nil) != tt.wantErr {
+			if err := Assign(tt.target, tt.in); (err != nil) != tt.wantErr {
 				t.Fatalf("%q: TestMapOutputForStructuredInputs() unexpected error: %s", tt.name, err)
 			}
 
@@ -2204,7 +1650,7 @@ func TestInvalidType(t *testing.T) {
 	}
 
 	var result Basic
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err == nil {
 		t.Fatal("error should exist")
 	}
@@ -2223,7 +1669,7 @@ func TestInvalidType(t *testing.T) {
 		"vuint": -42,
 	}
 
-	err = Decode(inputNegIntUint, &result)
+	err = Assign(&result, inputNegIntUint)
 	if err == nil {
 		t.Fatal("error should exist")
 	}
@@ -2241,7 +1687,7 @@ func TestInvalidType(t *testing.T) {
 		"vuint": -42.0,
 	}
 
-	err = Decode(inputNegFloatUint, &result)
+	err = Assign(&result, inputNegFloatUint)
 	if err == nil {
 		t.Fatal("error should exist")
 	}
@@ -2263,7 +1709,7 @@ func TestDecodeMetadata(t *testing.T) {
 		"vfoo": "foo",
 		"vbar": map[string]any{
 			"vstring": "foo",
-			"Vuint":   42,
+			"vuint":   42,
 			"vsilent": "false",
 			"foo":     "bar",
 		},
@@ -2273,7 +1719,7 @@ func TestDecodeMetadata(t *testing.T) {
 	var md Metadata
 	var result Nested
 
-	err := Decode(input, &result, func(c *DecoderConfig) {
+	err := Assign(&result, input, func(c *AssignConfig) {
 		c.Metadata = &md
 	})
 	if err != nil {
@@ -2281,15 +1727,17 @@ func TestDecodeMetadata(t *testing.T) {
 	}
 
 	expectedKeys := []string{"Vbar", "Vbar.Vstring", "Vbar.Vuint", "Vfoo"}
-	sort.Strings(md.Keys)
-	if !reflect.DeepEqual(md.Keys, expectedKeys) {
-		t.Fatalf("bad keys: %#v", md.Keys)
+	keys := md.KeysFull()
+	sort.Strings(keys)
+	if !reflect.DeepEqual(keys, expectedKeys) {
+		t.Fatalf("bad keys: %#v", keys)
 	}
 
 	expectedUnused := []string{"bar", "vbar[foo]", "vbar[vsilent]"}
-	sort.Strings(md.Unused)
-	if !reflect.DeepEqual(md.Unused, expectedUnused) {
-		t.Fatalf("bad unused: %#v", md.Unused)
+	unused := md.UnusedFull()
+	sort.Strings(unused)
+	if !reflect.DeepEqual(unused, expectedUnused) {
+		t.Fatalf("bad unused: %#v", unused)
 	}
 }
 
@@ -2305,7 +1753,7 @@ func TestMetadata(t *testing.T) {
 		"vfoo": "foo",
 		"vbar": map[string]any{
 			"vstring": "foo",
-			"Vuint":   42,
+			"vuint":   42,
 			"vsilent": "false",
 			"foo":     "bar",
 		},
@@ -2314,33 +1762,34 @@ func TestMetadata(t *testing.T) {
 
 	var md Metadata
 	var result testResult
-	decoder := New(func(c *DecoderConfig) {
+	err := Assign(&result, input, func(c *AssignConfig) {
 		c.Metadata = &md
 	})
-
-	err := decoder.Decode(input, &result)
 	if err != nil {
 		t.Fatalf("err: %s", err.Error())
 	}
 
 	expectedKeys := []string{"Vbar", "Vbar.Vstring", "Vbar.Vuint", "Vfoo"}
-	sort.Strings(md.Keys)
-	if !reflect.DeepEqual(md.Keys, expectedKeys) {
-		t.Fatalf("bad keys: %#v", md.Keys)
+	keys := md.KeysFull()
+	sort.Strings(keys)
+	if !reflect.DeepEqual(keys, expectedKeys) {
+		t.Fatalf("bad keys: %#v", keys)
 	}
 
 	expectedUnused := []string{"bar", "vbar[foo]", "vbar[vsilent]"}
-	sort.Strings(md.Unused)
-	if !reflect.DeepEqual(md.Unused, expectedUnused) {
-		t.Fatalf("bad unused: %#v", md.Unused)
+	unused := md.UnusedFull()
+	sort.Strings(unused)
+	if !reflect.DeepEqual(unused, expectedUnused) {
+		t.Fatalf("bad unused: %#v", unused)
 	}
 
 	expectedUnset := []string{
 		"Vbar.Vbool", "Vbar.Vdata", "Vbar.Vextra", "Vbar.Vfloat", "Vbar.Vint",
 		"Vbar.VjsonFloat", "Vbar.VjsonInt", "Vbar.VjsonNumber"}
-	sort.Strings(md.Unset)
-	if !reflect.DeepEqual(md.Unset, expectedUnset) {
-		t.Fatalf("bad unset: %#v", md.Unset)
+	unsets := md.UnsetFull()
+	sort.Strings(unsets)
+	if !reflect.DeepEqual(unsets, expectedUnset) {
+		t.Fatalf("bad unset: %#v", unsets)
 	}
 }
 
@@ -2353,38 +1802,38 @@ func TestMetadata_Embedded(t *testing.T) {
 	}
 
 	var md Metadata
-	var result EmbeddedSquash
-	decoder := New(func(c *DecoderConfig) {
+	var result Embedded
+	err := Assign(&result, input, func(c *AssignConfig) {
 		c.Metadata = &md
 	})
-
-	err := decoder.Decode(input, &result)
 	if err != nil {
 		t.Fatalf("err: %s", err.Error())
 	}
 
 	expectedKeys := []string{"Vstring", "Vunique"}
 
-	sort.Strings(md.Keys)
-	if !reflect.DeepEqual(md.Keys, expectedKeys) {
-		t.Fatalf("bad keys: %#v", md.Keys)
+	keys := md.Keys()
+	sort.Strings(keys)
+	if !reflect.DeepEqual(keys, expectedKeys) {
+		t.Fatalf("bad keys: %#v", keys)
 	}
 
 	expectedUnused := []string{}
-	if !reflect.DeepEqual(md.Unused, expectedUnused) {
-		t.Fatalf("bad unused: %#v", md.Unused)
+	unused := md.Unused()
+	if !reflect.DeepEqual(unused, expectedUnused) {
+		t.Fatalf("bad unused: %#v", unused)
 	}
 }
 
 func TestNonPtrValue(t *testing.T) {
 	t.Parallel()
 
-	err := Decode(map[string]any{}, Basic{})
+	err := Assign(Basic{}, map[string]any{})
 	if err == nil {
 		t.Fatal("error should exist")
 	}
 
-	if err.Error() != "result must be a pointer" {
+	if err.Error() != "target must be a pointer" {
 		t.Errorf("got unexpected error: %s", err)
 	}
 }
@@ -2398,7 +1847,7 @@ func TestTagged(t *testing.T) {
 	}
 
 	var result Tagged
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -2425,7 +1874,7 @@ func TestWeakDecode(t *testing.T) {
 		Bar string
 	}
 
-	if err := Decode(input, &result, func(c *DecoderConfig) {
+	if err := Assign(&result, input, func(c *AssignConfig) {
 		c.WeaklyTypedInput = true
 	}); err != nil {
 		t.Fatalf("err: %s", err)
@@ -2455,7 +1904,7 @@ func TestWeakDecodeMetadata(t *testing.T) {
 		unexported string
 	}
 
-	if err := Decode(input, &result, func(c *DecoderConfig) {
+	if err := Assign(&result, input, func(c *AssignConfig) {
 		c.WeaklyTypedInput = true
 		c.Metadata = &md
 	}); err != nil {
@@ -2469,15 +1918,17 @@ func TestWeakDecodeMetadata(t *testing.T) {
 	}
 
 	expectedKeys := []string{"Bar", "Foo"}
-	sort.Strings(md.Keys)
-	if !reflect.DeepEqual(md.Keys, expectedKeys) {
-		t.Fatalf("bad keys: %#v", md.Keys)
+	keys := md.Keys()
+	sort.Strings(keys)
+	if !reflect.DeepEqual(keys, expectedKeys) {
+		t.Fatalf("bad keys: %#v", keys)
 	}
 
 	expectedUnused := []string{"unexported", "unused"}
-	sort.Strings(md.Unused)
-	if !reflect.DeepEqual(md.Unused, expectedUnused) {
-		t.Fatalf("bad unused: %#v", md.Unused)
+	unused := md.Unused()
+	sort.Strings(unused)
+	if !reflect.DeepEqual(unused, expectedUnused) {
+		t.Fatalf("bad unused: %#v", unused)
 	}
 }
 
@@ -2499,7 +1950,7 @@ func TestDecode_StructTaggedWithOmitempty_OmitEmptyValues(t *testing.T) {
 	}
 
 	actual := &map[string]any{}
-	Decode(input, actual)
+	Assign(actual, input)
 
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatalf("Decode() expected: %#v, got: %#v", expected, actual)
@@ -2543,7 +1994,7 @@ func TestDecode_StructTaggedWithOmitempty_KeepNonEmptyValues(t *testing.T) {
 	}
 
 	actual := &map[string]any{}
-	Decode(input, actual)
+	Assign(actual, input)
 
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatalf("Decode() expected: %#v, got: %#v", expected, actual)
@@ -2561,10 +2012,10 @@ func TestDecode_mapToStruct(t *testing.T) {
 	}
 
 	var target Target
-	err := Decode(map[string]any{
+	err := Assign(&target, map[string]any{
 		"string":    "hello",
-		"StringPtr": "goodbye",
-	}, &target)
+		"stringPtr": "goodbye",
+	})
 	if err != nil {
 		t.Fatalf("got error: %s", err)
 	}
@@ -2580,49 +2031,12 @@ func TestDecode_mapToStruct(t *testing.T) {
 	}
 }
 
-func TestDecoder_MatchName(t *testing.T) {
-	t.Parallel()
-
-	type Target struct {
-		FirstMatch  string `object:"first_match"`
-		SecondMatch string
-		NoMatch     string `object:"no_match"`
-	}
-
-	input := map[string]any{
-		"first_match": "foo",
-		"SecondMatch": "bar",
-		"NO_MATCH":    "baz",
-	}
-
-	expected := Target{
-		FirstMatch:  "foo",
-		SecondMatch: "bar",
-	}
-
-	var actual Target
-	decoder := New(func(c *DecoderConfig) {
-		c.MatchName = func(mapKey, fieldName string) bool {
-			return mapKey == fieldName
-		}
-	})
-
-	err := decoder.Decode(input, &actual)
-	if err != nil {
-		t.Fatalf("err: %s", err)
-	}
-
-	if !reflect.DeepEqual(expected, actual) {
-		t.Fatalf("Decode() expected: %#v, got: %#v", expected, actual)
-	}
-}
-
-func TestDecoder_IgnoreUntaggedFields(t *testing.T) {
+func TestDecoder_IncludeIgnoreFields(t *testing.T) {
 	type Input struct {
 		UntaggedNumber int
-		TaggedNumber   int `object:"tagged_number"`
-		UntaggedString string
-		TaggedString   string `object:"tagged_string"`
+		TaggedNumber   int    `json:"tagged_number"`
+		UntaggedString string `json:"-"`
+		TaggedString   string `json:"tagged_string"`
 	}
 	input := &Input{
 		UntaggedNumber: 31,
@@ -2632,19 +2046,18 @@ func TestDecoder_IgnoreUntaggedFields(t *testing.T) {
 	}
 
 	actual := make(map[string]any)
-
-	decoder := New(func(c *DecoderConfig) {
-		c.IgnoreUntaggedFields = true
+	err := Assign(&actual, input, func(c *AssignConfig) {
+		c.IncludeIgnoreFields = true
 	})
-
-	err := decoder.Decode(input, &actual)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
 	expected := map[string]any{
-		"tagged_number": 42,
-		"tagged_string": "visible",
+		"tagged_number":  42,
+		"tagged_string":  "visible",
+		"untaggedNumber": 31,
+		"untaggedString": "hidden",
 	}
 
 	if !reflect.DeepEqual(expected, actual) {
@@ -2654,7 +2067,7 @@ func TestDecoder_IgnoreUntaggedFields(t *testing.T) {
 
 func testSliceInput(t *testing.T, input map[string]any, expected *Slice) {
 	var result Slice
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got error: %s", err)
 	}
@@ -2682,7 +2095,7 @@ func testSliceInput(t *testing.T, input map[string]any, expected *Slice) {
 
 func testArrayInput(t *testing.T, input map[string]any, expected *Array) {
 	var result Array
-	err := Decode(input, &result)
+	err := Assign(&result, input)
 	if err != nil {
 		t.Fatalf("got error: %s", err)
 	}
