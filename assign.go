@@ -72,160 +72,20 @@ type AssignConfig struct {
 	SkipSameValues bool
 }
 
-type Key struct {
-	display string // display name
-	actual  string // actual name
-
-	displayFull string
-	actualFull  string
-
-	parentKind reflect.Kind
-	parent     *Key
-	children   []*Key
-}
-
-func newKey(display string, actual string) *Key {
-	k := &Key{
-		display: display,
-		actual:  actual,
-	}
-
-	return k
-}
-
-func (k *Key) newChild(parentKind reflect.Kind, display string, actual string) *Key {
-
-	child := &Key{
-		display: display,
-		actual:  actual,
-
-		displayFull: genFullKey(parentKind, k.displayFull, display),
-		actualFull:  genFullKey(parentKind, k.actualFull, actual),
-
-		parent:     k,
-		parentKind: parentKind,
-	}
-
-	if k.children == nil {
-		k.children = []*Key{}
-	}
-	k.children = append(k.children, child)
-
-	return child
-}
-
-func (k *Key) IsEmpty() bool {
-	if k == nil {
-		return true
-	}
-	return k.display == "" && k.parent == nil
-}
-
-type Keys map[string]*Key
-
-func (k *Keys) FullDisplayNames() []string {
-	keys := []string{}
-	for _, key := range *k {
-		keys = append(keys, key.displayFull)
-	}
-	return keys
-}
-
-func (k *Keys) FullActualNames() []string {
-	keys := []string{}
-	for _, key := range *k {
-		keys = append(keys, key.actualFull)
-	}
-	return keys
-}
-
-func (k *Keys) RootDisplayNames() []string {
-	keys := []string{}
-	for _, key := range *k {
-		if !key.parent.IsEmpty() {
-			continue
-		}
-		keys = append(keys, key.displayFull)
-	}
-	return keys
-}
-
-func (k *Keys) RootActualNames() []string {
-	keys := []string{}
-	for _, key := range *k {
-		if !key.parent.IsEmpty() {
-			continue
-		}
-		keys = append(keys, key.actualFull)
-	}
-	return keys
-}
-
-func (k *Keys) Add(key *Key) *Keys {
-	(*k)[key.displayFull] = key
-	return k
-}
-
 // Metadata contains information about decoding a structure that
 // is tedious or difficult to get otherwise.
 type Metadata struct {
 	// Keys are the target object keys of the structure which were successfully assigned
-	keys Keys
+	Keys []string
 
 	// Unused are the keys that were found in the source but
 	// weren't decoded since there was no matching field in the target object
-	unused Keys
+	Unused []string
 
 	// Unset are the field names that were found in the target object
 	// but weren't set in the decoding process since there was no matching value
 	// in the input
-	unset Keys
-
-	_keys       []string
-	_keysFull   []string
-	_unused     []string
-	_unusedFull []string
-	_unset      []string
-	_unsetFull  []string
-}
-
-func (m *Metadata) Keys() []string {
-	if m._keys == nil {
-		m._keys = m.keys.RootDisplayNames()
-	}
-	return m._keys
-}
-func (m *Metadata) KeysFull() []string {
-	if m._keysFull == nil {
-		m._keysFull = m.keys.FullDisplayNames()
-	}
-	return m._keysFull
-}
-
-func (m *Metadata) Unused() []string {
-	if m._unused == nil {
-		m._unused = m.unused.RootActualNames()
-	}
-	return m._unused
-}
-func (m *Metadata) UnusedFull() []string {
-	if m._unusedFull == nil {
-		m._unusedFull = m.unused.FullActualNames()
-	}
-	return m._unusedFull
-}
-
-func (m *Metadata) Unset() []string {
-	if m._unset == nil {
-		m._unset = m.unset.RootDisplayNames()
-	}
-	return m._unset
-}
-func (m *Metadata) UnsetFull() []string {
-	if m._unsetFull == nil {
-		m._unsetFull = m.unset.FullDisplayNames()
-	}
-	return m._unsetFull
+	Unset []string
 }
 
 // Assign 将 source 对象的值解码并赋值给 target 对象。
@@ -253,14 +113,14 @@ func (a *assigner) withConfig(configs ...func(c *AssignConfig)) *assigner {
 	}
 
 	if config.Metadata != nil {
-		if config.Metadata.keys == nil {
-			config.Metadata.keys = make(Keys, 0)
+		if config.Metadata.Keys == nil {
+			config.Metadata.Keys = []string{}
 		}
-		if config.Metadata.unused == nil {
-			config.Metadata.unused = make(Keys, 0)
+		if config.Metadata.Unused == nil {
+			config.Metadata.Unused = []string{}
 		}
-		if config.Metadata.unset == nil {
-			config.Metadata.unset = make(Keys, 0)
+		if config.Metadata.Unset == nil {
+			config.Metadata.Unset = []string{}
 		}
 	}
 
@@ -285,25 +145,17 @@ func (a *assigner) Assign(target, source any, configs ...func(c *AssignConfig)) 
 		as = as.withConfig(configs...)
 	}
 
-	return as.assign(targetVal, nil, source, nil)
+	return as.assign(targetVal, "", source, "")
 }
 
 // Decodes an unknown data type into a specific reflection value.
-func (a *assigner) assign(targetVal reflect.Value, targetKey *Key, source any, sourceKey *Key) error {
+func (a *assigner) assign(targetVal reflect.Value, targetKey kkk, source any, sourceKey kkk) error {
 
 	if a.shouldSkipKey(targetKey, sourceKey) {
 		return nil
 	}
 
 	sourceVal := reflect.ValueOf(source)
-
-	if targetKey == nil {
-		targetKey = newKey("", "")
-	}
-
-	if sourceKey == nil {
-		sourceKey = newKey("", "")
-	}
 
 	if source != nil {
 		// We need to check here if input is a typed nil. Typed nils won't
@@ -364,7 +216,7 @@ func (a *assigner) assign(targetVal reflect.Value, targetKey *Key, source any, s
 		err = a.assignFunc(targetVal, targetKey, source, sourceKey)
 	default:
 		// If we reached this point then we weren't able to decode it
-		return fmt.Errorf("%s: unsupported type: %s", targetKey.displayFull, targetKind)
+		return fmt.Errorf("%s: unsupported type: %s", targetKey.String(), targetKind)
 	}
 
 	// If we reached here, then we successfully decoded SOMETHING, so
@@ -378,7 +230,7 @@ func (a *assigner) assign(targetVal reflect.Value, targetKey *Key, source any, s
 
 // This decodes a basic type (bool, int, string, etc.) and sets the
 // value to "data" of that type.
-func (a *assigner) assignBasic(targetVal reflect.Value, targetKey *Key, source any, sourceKey *Key) error {
+func (a *assigner) assignBasic(targetVal reflect.Value, targetKey kkk, source any, sourceKey kkk) error {
 	if targetVal.IsValid() && targetVal.Elem().IsValid() { // TODO: 搞明白这里的作用和意义
 		elem := targetVal.Elem()
 
@@ -427,14 +279,14 @@ func (a *assigner) assignBasic(targetVal reflect.Value, targetKey *Key, source a
 	if !sourceType.AssignableTo(targetVal.Type()) {
 		return fmt.Errorf(
 			"'%s' expected type '%s', got '%s'",
-			targetKey.displayFull, targetVal.Type(), sourceType)
+			targetKey.String(), targetVal.Type(), sourceType)
 	}
 
 	targetVal.Set(sourceVal)
 	return nil
 }
 
-func (a *assigner) assignString(targetVal reflect.Value, targetKey *Key, source any, sourceKey *Key) error {
+func (a *assigner) assignString(targetVal reflect.Value, targetKey kkk, source any, sourceKey kkk) error {
 	sourceVal := reflect.Indirect(reflect.ValueOf(source))
 	sourceKind := getKind(sourceVal)
 
@@ -480,13 +332,13 @@ func (a *assigner) assignString(targetVal reflect.Value, targetKey *Key, source 
 	if !converted {
 		return fmt.Errorf(
 			"'%s' expected type '%s', got unconvertible type '%s', value: '%v'",
-			targetKey.displayFull, targetVal.Type(), sourceVal.Type(), source)
+			targetKey.String(), targetVal.Type(), sourceVal.Type(), source)
 	}
 
 	return nil
 }
 
-func (a *assigner) assignInt(targetVal reflect.Value, targetKey *Key, source any, sourceKey *Key) error {
+func (a *assigner) assignInt(targetVal reflect.Value, targetKey kkk, source any, sourceKey kkk) error {
 	sourceVal := reflect.Indirect(reflect.ValueOf(source))
 	sourceKind := getKind(sourceVal)
 	sourceType := sourceVal.Type()
@@ -514,26 +366,26 @@ func (a *assigner) assignInt(targetVal reflect.Value, targetKey *Key, source any
 		if err == nil {
 			targetVal.SetInt(i)
 		} else {
-			return fmt.Errorf("cannot parse '%s' as int: %s", targetKey.displayFull, err)
+			return fmt.Errorf("cannot parse '%s' as int: %s", targetKey.String(), err)
 		}
 	case sourceType.PkgPath() == "encoding/json" && sourceType.Name() == "Number":
 		jn := source.(json.Number)
 		i, err := jn.Int64()
 		if err != nil {
 			return fmt.Errorf(
-				"error decoding json.Number into %s: %s", targetKey.displayFull, err)
+				"error decoding json.Number into %s: %s", targetKey.String(), err)
 		}
 		targetVal.SetInt(i)
 	default:
 		return fmt.Errorf(
 			"'%s' expected type '%s', got unconvertible type '%s', value: '%v'",
-			targetKey.displayFull, targetVal.Type(), sourceVal.Type(), source)
+			targetKey.String(), targetVal.Type(), sourceVal.Type(), source)
 	}
 
 	return nil
 }
 
-func (a *assigner) assignUint(targetVal reflect.Value, targetKey *Key, source any, sourceKey *Key) error {
+func (a *assigner) assignUint(targetVal reflect.Value, targetKey kkk, source any, sourceKey kkk) error {
 	sourceVal := reflect.Indirect(reflect.ValueOf(source))
 	sourceKind := getKind(sourceVal)
 	sourceType := sourceVal.Type()
@@ -543,7 +395,7 @@ func (a *assigner) assignUint(targetVal reflect.Value, targetKey *Key, source an
 		i := sourceVal.Int()
 		if i < 0 && !a.config.WeaklyTypedInput {
 			return fmt.Errorf("cannot parse '%s', %d overflows uint",
-				targetKey.displayFull, i)
+				targetKey.String(), i)
 		}
 		targetVal.SetUint(uint64(i))
 	case sourceKind == reflect.Uint:
@@ -552,7 +404,7 @@ func (a *assigner) assignUint(targetVal reflect.Value, targetKey *Key, source an
 		f := sourceVal.Float()
 		if f < 0 && !a.config.WeaklyTypedInput {
 			return fmt.Errorf("cannot parse '%s', %f overflows uint",
-				targetKey.displayFull, f)
+				targetKey.String(), f)
 		}
 		targetVal.SetUint(uint64(f))
 	case sourceKind == reflect.Bool && a.config.WeaklyTypedInput:
@@ -571,26 +423,26 @@ func (a *assigner) assignUint(targetVal reflect.Value, targetKey *Key, source an
 		if err == nil {
 			targetVal.SetUint(i)
 		} else {
-			return fmt.Errorf("cannot parse '%s' as uint: %s", targetKey.displayFull, err)
+			return fmt.Errorf("cannot parse '%s' as uint: %s", targetKey.String(), err)
 		}
 	case sourceType.PkgPath() == "encoding/json" && sourceType.Name() == "Number":
 		jn := source.(json.Number)
 		i, err := strconv.ParseUint(string(jn), 0, 64)
 		if err != nil {
 			return fmt.Errorf(
-				"error decoding json.Number into %s: %s", targetKey.displayFull, err)
+				"error decoding json.Number into %s: %s", targetKey.String(), err)
 		}
 		targetVal.SetUint(i)
 	default:
 		return fmt.Errorf(
 			"'%s' expected type '%s', got unconvertible type '%s', value: '%v'",
-			targetKey.displayFull, targetVal.Type(), sourceVal.Type(), source)
+			targetKey.String(), targetVal.Type(), sourceVal.Type(), source)
 	}
 
 	return nil
 }
 
-func (a *assigner) assignBool(targetVal reflect.Value, targetKey *Key, source any, sourceKey *Key) error {
+func (a *assigner) assignBool(targetVal reflect.Value, targetKey kkk, source any, sourceKey kkk) error {
 	sourceVal := reflect.Indirect(reflect.ValueOf(source))
 	sourceKind := getKind(sourceVal)
 
@@ -610,18 +462,18 @@ func (a *assigner) assignBool(targetVal reflect.Value, targetKey *Key, source an
 		} else if sourceVal.String() == "" {
 			targetVal.SetBool(false)
 		} else {
-			return fmt.Errorf("cannot parse '%s' as bool: %s", targetKey.displayFull, err)
+			return fmt.Errorf("cannot parse '%s' as bool: %s", targetKey.String(), err)
 		}
 	default:
 		return fmt.Errorf(
 			"'%s' expected type '%s', got unconvertible type '%s', value: '%v'",
-			targetKey.displayFull, targetVal.Type(), sourceVal.Type(), source)
+			targetKey.String(), targetVal.Type(), sourceVal.Type(), source)
 	}
 
 	return nil
 }
 
-func (a *assigner) assignFloat(targetVal reflect.Value, targetKey *Key, source any, sourceKey *Key) error {
+func (a *assigner) assignFloat(targetVal reflect.Value, targetKey kkk, source any, sourceKey kkk) error {
 	sourceVal := reflect.Indirect(reflect.ValueOf(source))
 	sourceKind := getKind(sourceVal)
 	sourceType := sourceVal.Type()
@@ -649,26 +501,26 @@ func (a *assigner) assignFloat(targetVal reflect.Value, targetKey *Key, source a
 		if err == nil {
 			targetVal.SetFloat(f)
 		} else {
-			return fmt.Errorf("cannot parse '%s' as float: %s", targetKey.displayFull, err)
+			return fmt.Errorf("cannot parse '%s' as float: %s", targetKey.String(), err)
 		}
 	case sourceType.PkgPath() == "encoding/json" && sourceType.Name() == "Number":
 		jn := source.(json.Number)
 		i, err := jn.Float64()
 		if err != nil {
 			return fmt.Errorf(
-				"error decoding json.Number into %s: %s", targetKey.displayFull, err)
+				"error decoding json.Number into %s: %s", targetKey.String(), err)
 		}
 		targetVal.SetFloat(i)
 	default:
 		return fmt.Errorf(
 			"'%s' expected type '%s', got unconvertible type '%s', value: '%v'",
-			targetKey.displayFull, targetVal.Type(), sourceVal.Type(), source)
+			targetKey.String(), targetVal.Type(), sourceVal.Type(), source)
 	}
 
 	return nil
 }
 
-func (a *assigner) assignMap(targetVal reflect.Value, targetKey *Key, source any, sourceKey *Key) error {
+func (a *assigner) assignMap(targetVal reflect.Value, targetKey kkk, source any, sourceKey kkk) error {
 
 	sourceVal := reflect.Indirect(reflect.ValueOf(source))
 
@@ -688,11 +540,11 @@ func (a *assigner) assignMap(targetVal reflect.Value, targetKey *Key, source any
 		fallthrough
 
 	default:
-		return fmt.Errorf("'%s' expected a map, got '%s'", targetKey.displayFull, sourceVal.Kind())
+		return fmt.Errorf("'%s' expected a map, got '%s'", targetKey.String(), sourceVal.Kind())
 	}
 }
 
-func (a *assigner) assignMapFromSlice(targetVal reflect.Value, targetKey *Key, sourceVal reflect.Value, sourceKey *Key) error {
+func (a *assigner) assignMapFromSlice(targetVal reflect.Value, targetKey kkk, sourceVal reflect.Value, sourceKey kkk) error {
 	if sourceVal.IsNil() {
 		return nil
 	}
@@ -718,7 +570,7 @@ func (a *assigner) assignMapFromSlice(targetVal reflect.Value, targetKey *Key, s
 			targetVal,
 			targetKey,
 			srcElem.Interface(),
-			sourceKey.newChild(reflect.Slice, k, k),
+			sourceKey.newChild(reflect.Slice, k),
 		)
 		if err != nil {
 			return err
@@ -728,7 +580,7 @@ func (a *assigner) assignMapFromSlice(targetVal reflect.Value, targetKey *Key, s
 	return nil
 }
 
-func (a *assigner) assignMapFromMap(targetVal reflect.Value, targetKey *Key, sourceVal reflect.Value, sourceKey *Key) error {
+func (a *assigner) assignMapFromMap(targetVal reflect.Value, targetKey kkk, sourceVal reflect.Value, sourceKey kkk) error {
 	targetValType := targetVal.Type()
 	targetValKeyType := targetValType.Key()
 	targetValElemType := targetValType.Elem()
@@ -761,8 +613,8 @@ func (a *assigner) assignMapFromMap(targetVal reflect.Value, targetKey *Key, sou
 		targetElem := reflect.Indirect(reflect.New(targetValElemType))
 		sourceElem := sourceVal.MapIndex(srcKey)
 
-		childTargetKey := targetKey.newChild(reflect.Map, kStr, kStr)
-		childSourceKey := sourceKey.newChild(reflect.Map, kStr, kStr)
+		childTargetKey := targetKey.newChild(reflect.Map, kStr)
+		childSourceKey := sourceKey.newChild(reflect.Map, kStr)
 
 		if a.shouldSkipKey(childTargetKey, childSourceKey) {
 			continue
@@ -770,7 +622,7 @@ func (a *assigner) assignMapFromMap(targetVal reflect.Value, targetKey *Key, sou
 
 		// First decode the key into the proper type
 		currentKey := reflect.Indirect(reflect.New(targetValKeyType))
-		if err := weakAssigner.assign(currentKey, nil, srcKey.Interface(), nil); err != nil {
+		if err := weakAssigner.assign(currentKey, "", srcKey.Interface(), ""); err != nil {
 			errors = appendErrors(errors, err)
 			continue
 		}
@@ -792,7 +644,7 @@ func (a *assigner) assignMapFromMap(targetVal reflect.Value, targetKey *Key, sou
 	return nil
 }
 
-func (a *assigner) assignMapFromStruct(targetVal reflect.Value, targetKey *Key, sourceVal reflect.Value, sourceKey *Key) error {
+func (a *assigner) assignMapFromStruct(targetVal reflect.Value, targetKey kkk, sourceVal reflect.Value, sourceKey kkk) error {
 	targetMapType := targetVal.Type()
 	targetKeyType := targetMapType.Key()
 	targetElemType := targetMapType.Elem()
@@ -801,32 +653,33 @@ func (a *assigner) assignMapFromStruct(targetVal reflect.Value, targetKey *Key, 
 		targetVal.Set(reflect.MakeMap(reflect.MapOf(targetKeyType, targetElemType)))
 	}
 
-	sourceFields := a.flattenStruct(sourceVal, sourceKey)
-	for _, skf := range sourceFields {
+	sourceFields := a.flattenStruct(sourceVal)
+	for _, srcField := range sourceFields {
 		// Next get the actual value of this field and verify it is assignable
 		// to the map value.
-		if !skf.fieldVal.Type().AssignableTo(targetVal.Type().Elem()) {
-			return fmt.Errorf("cannot assign type '%s' to map value field of type '%s'", skf.fieldVal.Type(), targetVal.Type().Elem())
+		if !srcField.fieldVal.Type().AssignableTo(targetVal.Type().Elem()) {
+			return fmt.Errorf("cannot assign type '%s' to map value field of type '%s'", srcField.fieldVal.Type(), targetVal.Type().Elem())
 		}
 
-		targetFieldKey := targetKey.newChild(reflect.Struct, skf.key.actual, skf.key.actual)
+		targetFieldKey := targetKey.newChild(reflect.Map, srcField.actualName)
+		sourceFieldKey := sourceKey.newChild(reflect.Struct, srcField.displayName)
 
-		if a.shouldSkipKey(targetFieldKey, skf.key) {
+		if a.shouldSkipKey(targetFieldKey, sourceFieldKey) {
 			continue
 		}
 
 		keyVal := reflect.Indirect(reflect.New(targetKeyType))
-		weakAssigner.assign(keyVal, nil, targetFieldKey.actual, nil)
+		weakAssigner.assign(keyVal, "", srcField.actualName, "")
 
-		switch skf.fieldVal.Kind() {
+		switch srcField.fieldVal.Kind() {
 
 		// this is an embedded struct, so handle it differently
 		case reflect.Struct:
 
-			sourceFieldType := skf.fieldVal.Type()
+			sourceFieldType := srcField.fieldVal.Type()
 			// struct 是否可以塞入 map
 			if sourceFieldType.AssignableTo(targetElemType) {
-				targetVal.SetMapIndex(keyVal, skf.fieldVal)
+				targetVal.SetMapIndex(keyVal, srcField.fieldVal)
 				a.addMetaKey(targetFieldKey)
 				continue
 			}
@@ -834,11 +687,11 @@ func (a *assigner) assignMapFromStruct(targetVal reflect.Value, targetKey *Key, 
 			targetChild := map[string]any{}
 			targetChildVal := reflect.ValueOf(targetChild)
 			if !targetChildVal.Type().AssignableTo(targetElemType) {
-				a.addMetaUnused(skf.key)
+				a.addMetaUnused(sourceFieldKey)
 				continue
 			}
 
-			if err := a.assignMapFromStruct(targetChildVal, targetFieldKey, skf.fieldVal, skf.key); err != nil {
+			if err := a.assignMapFromStruct(targetChildVal, targetFieldKey, srcField.fieldVal, sourceFieldKey); err != nil {
 				return err
 			}
 
@@ -847,12 +700,12 @@ func (a *assigner) assignMapFromStruct(targetVal reflect.Value, targetKey *Key, 
 
 		default:
 
-			if skf.omitempty && isEmptyValue(skf.fieldVal) {
-				a.addMetaUnused(skf.key)
+			if srcField.omitempty && isEmptyValue(srcField.fieldVal) {
+				a.addMetaUnused(sourceFieldKey)
 				continue
 			}
 
-			targetVal.SetMapIndex(keyVal, skf.fieldVal)
+			targetVal.SetMapIndex(keyVal, srcField.fieldVal)
 			a.addMetaKey(targetFieldKey)
 		}
 	}
@@ -860,7 +713,7 @@ func (a *assigner) assignMapFromStruct(targetVal reflect.Value, targetKey *Key, 
 	return nil
 }
 
-func (a *assigner) assignPtr(targetVal reflect.Value, targetKey *Key, source any, sourceKey *Key) (bool, error) {
+func (a *assigner) assignPtr(targetVal reflect.Value, targetKey kkk, source any, sourceKey kkk) (bool, error) {
 	// If the input data is nil, then we want to just set the output
 	// pointer to be nil as well.
 	isNil := source == nil
@@ -907,20 +760,20 @@ func (a *assigner) assignPtr(targetVal reflect.Value, targetKey *Key, source any
 	return false, nil
 }
 
-func (a *assigner) assignFunc(targetVal reflect.Value, targetKey *Key, source any, sourceKey *Key) error {
+func (a *assigner) assignFunc(targetVal reflect.Value, targetKey kkk, source any, sourceKey kkk) error {
 	// Create an element of the concrete (non pointer) type and decode
 	// into that. Then set the value of the pointer to this type.
 	sourceVal := reflect.Indirect(reflect.ValueOf(source))
 	if targetVal.Type() != sourceVal.Type() {
 		return fmt.Errorf(
 			"'%s' expected type '%s', got unconvertible type '%s', value: '%v'",
-			targetKey.displayFull, targetVal.Type(), sourceVal.Type(), source)
+			targetKey.String(), targetVal.Type(), sourceVal.Type(), source)
 	}
 	targetVal.Set(sourceVal)
 	return nil
 }
 
-func (a *assigner) assignSlice(targetVal reflect.Value, targetKey *Key, source any, sourceKey *Key) error {
+func (a *assigner) assignSlice(targetVal reflect.Value, targetKey kkk, source any, sourceKey kkk) error {
 	sourceVal := reflect.Indirect(reflect.ValueOf(source))
 	sourceValKind := sourceVal.Kind()
 	targetValType := targetVal.Type()
@@ -957,7 +810,7 @@ func (a *assigner) assignSlice(targetVal reflect.Value, targetKey *Key, source a
 		}
 
 		return fmt.Errorf(
-			"'%s': source data must be an array or slice, got %s", targetKey.displayFull, sourceValKind)
+			"'%s': source data must be an array or slice, got %s", targetKey.String(), sourceValKind)
 	}
 
 	// If the input value is nil, then don't allocate since empty != nil
@@ -985,8 +838,8 @@ func (a *assigner) assignSlice(targetVal reflect.Value, targetKey *Key, source a
 
 		k := strconv.Itoa(i)
 
-		targetFieldKey := targetKey.newChild(reflect.Slice, k, k)
-		sourceFieldKey := sourceKey.newChild(reflect.Slice, k, k)
+		targetFieldKey := targetKey.newChild(reflect.Slice, k)
+		sourceFieldKey := sourceKey.newChild(reflect.Slice, k)
 
 		if a.shouldSkipKey(targetFieldKey, sourceFieldKey) {
 			continue
@@ -1008,7 +861,7 @@ func (a *assigner) assignSlice(targetVal reflect.Value, targetKey *Key, source a
 	return nil
 }
 
-func (a *assigner) assignArray(targetVal reflect.Value, targetKey *Key, source any, sourceKey *Key) error {
+func (a *assigner) assignArray(targetVal reflect.Value, targetKey kkk, source any, sourceKey kkk) error {
 	sourceVal := reflect.Indirect(reflect.ValueOf(source))
 	sourceValKind := sourceVal.Kind()
 	targetValType := targetVal.Type()
@@ -1039,12 +892,12 @@ func (a *assigner) assignArray(targetVal reflect.Value, targetKey *Key, source a
 			}
 
 			return fmt.Errorf(
-				"'%s': source data must be an array or slice, got %s", targetKey.displayFull, sourceValKind)
+				"'%s': source data must be an array or slice, got %s", targetKey.String(), sourceValKind)
 
 		}
 		if sourceVal.Len() > arrayType.Len() {
 			return fmt.Errorf(
-				"'%s': expected source data to have length less or equal to %d, got %d", targetKey.displayFull, arrayType.Len(), sourceVal.Len())
+				"'%s': expected source data to have length less or equal to %d, got %d", targetKey.String(), arrayType.Len(), sourceVal.Len())
 
 		}
 
@@ -1061,8 +914,8 @@ func (a *assigner) assignArray(targetVal reflect.Value, targetKey *Key, source a
 
 		k := strconv.Itoa(i)
 
-		targetFieldKey := targetKey.newChild(reflect.Array, k, k)
-		sourceFieldKey := sourceKey.newChild(reflect.Array, k, k)
+		targetFieldKey := targetKey.newChild(reflect.Array, k)
+		sourceFieldKey := sourceKey.newChild(reflect.Array, k)
 
 		if a.shouldSkipKey(targetFieldKey, sourceFieldKey) {
 			continue
@@ -1083,7 +936,7 @@ func (a *assigner) assignArray(targetVal reflect.Value, targetKey *Key, source a
 	return nil
 }
 
-func (a *assigner) assignStruct(targetVal reflect.Value, targetKey *Key, source any, sourceKey *Key) error {
+func (a *assigner) assignStruct(targetVal reflect.Value, targetKey kkk, source any, sourceKey kkk) error {
 
 	sourceVal := reflect.Indirect(reflect.ValueOf(source))
 
@@ -1096,18 +949,19 @@ func (a *assigner) assignStruct(targetVal reflect.Value, targetKey *Key, source 
 		return a.assignStructFromStruct(targetVal, targetKey, sourceVal, sourceKey)
 
 	default:
-		return fmt.Errorf("'%s' expected a map, got '%s'", targetKey.displayFull, sourceVal.Kind())
+		return fmt.Errorf("'%s' expected a map, got '%s'", targetKey.String(), sourceVal.Kind())
 	}
 }
 
 type fieldInfo struct {
-	key       *Key
-	field     reflect.StructField
-	fieldVal  reflect.Value
-	omitempty bool
+	field       reflect.StructField
+	fieldVal    reflect.Value
+	displayName string
+	actualName  string
+	omitempty   bool
 }
 
-func (a *assigner) flattenStruct(val reflect.Value, key *Key) map[string]fieldInfo {
+func (a *assigner) flattenStruct(val reflect.Value) map[string]fieldInfo {
 
 	// This slice will keep track of all the structs we'll be decoding.
 	// There can be more than one struct if there are embedded structs
@@ -1167,10 +1021,11 @@ func (a *assigner) flattenStruct(val reflect.Value, key *Key) map[string]fieldIn
 			}
 
 			fields[field.Name] = fieldInfo{
-				key:       key.newChild(fieldVal.Type().Kind(), field.Name, actualName),
-				field:     field,
-				fieldVal:  fieldVal,
-				omitempty: omitempty,
+				field:       field,
+				fieldVal:    fieldVal,
+				displayName: field.Name,
+				actualName:  actualName,
+				omitempty:   omitempty,
 			}
 		}
 
@@ -1180,13 +1035,13 @@ func (a *assigner) flattenStruct(val reflect.Value, key *Key) map[string]fieldIn
 
 }
 
-func (a *assigner) assignStructFromMap(targetVal reflect.Value, targetKey *Key, sourceVal reflect.Value, sourceKey *Key) error {
+func (a *assigner) assignStructFromMap(targetVal reflect.Value, targetKey kkk, sourceVal reflect.Value, sourceKey kkk) error {
 	sourceType := sourceVal.Type()
 	sourceTypeKey := sourceType.Key()
 	if kind := sourceTypeKey.Kind(); kind != reflect.String && kind != reflect.Interface {
 		return fmt.Errorf(
 			"'%s' needs a map with string keys, has '%s' keys",
-			targetKey.displayFull, sourceTypeKey.Kind())
+			targetKey.String(), sourceTypeKey.Kind())
 	}
 
 	unusedMapKeys := make(map[string]struct{})
@@ -1194,47 +1049,47 @@ func (a *assigner) assignStructFromMap(targetVal reflect.Value, targetKey *Key, 
 		unusedMapKeys[k.String()] = struct{}{}
 	}
 
-	targetFields := a.flattenStruct(targetVal, targetKey)
+	targetFields := a.flattenStruct(targetVal)
 
 	errors := make([]string, 0)
-	for _, tkf := range targetFields {
-		keyName := tkf.key.actual
-		sourceFieldKey := sourceKey.newChild(reflect.Map, keyName, keyName)
+	for _, targetField := range targetFields {
 
 		mapKey := reflect.New(sourceTypeKey)
-		if err := weakAssigner.assign(mapKey, nil, keyName, nil); err != nil {
+		if err := weakAssigner.assign(mapKey, "", targetField.actualName, ""); err != nil {
 			errors = appendErrors(errors, err)
 			continue
 		}
 
+		targetFieldKey := targetKey.newChild(reflect.Struct, targetField.displayName)
+
 		value := sourceVal.MapIndex(reflect.Indirect(mapKey))
 		if !value.IsValid() {
-			a.addMetaUnset(tkf.key)
+			a.addMetaUnset(targetFieldKey)
 			continue
 		}
 
-		if a.shouldSkipKey(tkf.key, sourceFieldKey) {
+		sourceFieldKey := sourceKey.newChild(reflect.Map, targetField.actualName)
+
+		if a.shouldSkipKey(targetFieldKey, sourceFieldKey) {
 			continue
 		}
 
-		if !tkf.fieldVal.CanSet() {
-			a.addMetaUnset(tkf.key)
+		if !targetField.fieldVal.CanSet() {
+			a.addMetaUnset(targetFieldKey)
 			continue
 		}
 
 		// 已处理的删除key
-		delete(unusedMapKeys, sourceFieldKey.actual)
+		delete(unusedMapKeys, targetField.actualName)
 
-		if err := a.assign(tkf.fieldVal, tkf.key, value.Interface(), sourceFieldKey); err != nil {
+		if err := a.assign(targetField.fieldVal, targetFieldKey, value.Interface(), sourceFieldKey); err != nil {
 			errors = appendErrors(errors, err)
 		}
 
 	}
 
-	if len(unusedMapKeys) > 0 {
-		for k := range unusedMapKeys {
-			a.addMetaUnused(sourceKey.newChild(reflect.Map, k, k))
-		}
+	for k := range unusedMapKeys {
+		a.addMetaUnused(sourceKey.newChild(reflect.Map, k))
 	}
 
 	if len(errors) > 0 {
@@ -1244,45 +1099,48 @@ func (a *assigner) assignStructFromMap(targetVal reflect.Value, targetKey *Key, 
 	return nil
 }
 
-func (a *assigner) assignStructFromStruct(targetVal reflect.Value, targetKey *Key, sourceVal reflect.Value, sourceKey *Key) error {
-	targetFields := a.flattenStruct(targetVal, targetKey)
-	sourceFields := a.flattenStruct(sourceVal, sourceKey)
+func (a *assigner) assignStructFromStruct(targetVal reflect.Value, targetKey kkk, sourceVal reflect.Value, sourceKey kkk) error {
+	targetFields := a.flattenStruct(targetVal)
+	sourceFields := a.flattenStruct(sourceVal)
 
 	errors := make([]string, 0)
-	for tfieldName, tkf := range targetFields {
-		skf, exist := sourceFields[tfieldName]
+	for tfieldName, targetField := range targetFields {
+
+		targetFieldKey := targetKey.newChild(reflect.Struct, targetField.displayName)
+
+		sourceField, exist := sourceFields[tfieldName]
 		if !exist {
-			a.addMetaUnset(tkf.key)
+			a.addMetaUnset(targetFieldKey)
 			continue
 		}
 
-		if a.shouldSkipKey(tkf.key, skf.key) {
+		sourceFieldKey := sourceKey.newChild(reflect.Struct, sourceField.displayName)
+
+		if a.shouldSkipKey(targetFieldKey, sourceFieldKey) {
 			continue
 		}
 
-		if !skf.fieldVal.IsValid() {
-			a.addMetaUnused(skf.key)
+		if !sourceField.fieldVal.IsValid() {
+			a.addMetaUnused(sourceFieldKey)
 			continue
 		}
 
-		if !tkf.fieldVal.CanSet() {
-			a.addMetaUnset(tkf.key)
+		if !targetField.fieldVal.CanSet() {
+			a.addMetaUnset(targetFieldKey)
 			continue
 		}
 
 		// 已处理的删除key
 		delete(sourceFields, tfieldName)
 
-		if err := a.assign(tkf.fieldVal, tkf.key, skf.fieldVal.Interface(), skf.key); err != nil {
+		if err := a.assign(targetField.fieldVal, targetFieldKey, sourceField.fieldVal.Interface(), sourceFieldKey); err != nil {
 			errors = appendErrors(errors, err)
 		}
 
 	}
 
-	if len(sourceFields) > 0 {
-		for _, skf := range sourceFields {
-			a.addMetaUnused(skf.key)
-		}
+	for displayName, _ := range sourceFields {
+		a.addMetaUnused(sourceKey.newChild(reflect.Struct, displayName))
 	}
 
 	if len(errors) > 0 {
@@ -1292,17 +1150,15 @@ func (a *assigner) assignStructFromStruct(targetVal reflect.Value, targetKey *Ke
 	return nil
 }
 
-func (a *assigner) shouldSkipKey(targetKey, sourceKey *Key) bool {
+func (a *assigner) shouldSkipKey(targetKey, sourceKey kkk) bool {
 
-	if targetKey == nil || sourceKey == nil {
+	if targetKey == "" || sourceKey == "" {
 		return false
 	}
 
 	for _, keyToSkip := range a.config.SkipKeys {
-		if targetKey.displayFull == keyToSkip ||
-			targetKey.actualFull == keyToSkip ||
-			sourceKey.displayFull == keyToSkip ||
-			sourceKey.actualFull == keyToSkip {
+		if string(targetKey) == keyToSkip ||
+			string(sourceKey) == keyToSkip {
 			a.addMetaUnused(sourceKey)
 			a.addMetaUnset(targetKey)
 			return true
@@ -1311,7 +1167,7 @@ func (a *assigner) shouldSkipKey(targetKey, sourceKey *Key) bool {
 	return false
 }
 
-func (a *assigner) addMetaKey(targetKey *Key) {
+func (a *assigner) addMetaKey(targetKey kkk) {
 	if a.config.Metadata == nil {
 		return
 	}
@@ -1320,31 +1176,31 @@ func (a *assigner) addMetaKey(targetKey *Key) {
 		return
 	}
 
-	a.config.Metadata.keys.Add(targetKey)
+	a.config.Metadata.Keys = append(a.config.Metadata.Keys, string(targetKey))
 }
 
-func (a *assigner) addMetaUnused(sourceKey *Key) {
+func (a *assigner) addMetaUnused(sourceKey kkk) {
 	if a.config.Metadata == nil {
 		return
 	}
 
-	if sourceKey == nil {
+	if sourceKey.IsEmpty() {
 		return
 	}
 
-	a.config.Metadata.unused.Add(sourceKey)
+	a.config.Metadata.Unused = append(a.config.Metadata.Unused, string(sourceKey))
 }
 
-func (a *assigner) addMetaUnset(targetKey *Key) {
+func (a *assigner) addMetaUnset(targetKey kkk) {
 	if a.config.Metadata == nil {
 		return
 	}
 
-	if targetKey == nil {
+	if targetKey.IsEmpty() {
 		return
 	}
 
-	a.config.Metadata.unset.Add(targetKey)
+	a.config.Metadata.Unset = append(a.config.Metadata.Unset, string(targetKey))
 }
 
 func isEmptyValue(v reflect.Value) bool {
@@ -1406,6 +1262,21 @@ func (a *assigner) parseTag(field reflect.StructField) (actualName string, omite
 	}
 
 	return
+}
+
+type kkk string
+
+func (k kkk) String() string {
+	return string(k)
+}
+
+func (k kkk) IsEmpty() bool {
+	return k == ""
+}
+
+func (k kkk) newChild(parentKind reflect.Kind, fieldName string) kkk {
+	n := genFullKey(parentKind, string(k), fieldName)
+	return kkk(n)
 }
 
 func genFullKey(parentKind reflect.Kind, parentFull, keyName string) string {

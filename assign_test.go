@@ -1727,17 +1727,15 @@ func TestDecodeMetadata(t *testing.T) {
 	}
 
 	expectedKeys := []string{"Vbar", "Vbar.Vstring", "Vbar.Vuint", "Vfoo"}
-	keys := md.KeysFull()
-	sort.Strings(keys)
-	if !reflect.DeepEqual(keys, expectedKeys) {
-		t.Fatalf("bad keys: %#v", keys)
+	sort.Strings(md.Keys)
+	if !reflect.DeepEqual(md.Keys, expectedKeys) {
+		t.Fatalf("bad keys: %#v", md.Keys)
 	}
 
 	expectedUnused := []string{"bar", "vbar[foo]", "vbar[vsilent]"}
-	unused := md.UnusedFull()
-	sort.Strings(unused)
-	if !reflect.DeepEqual(unused, expectedUnused) {
-		t.Fatalf("bad unused: %#v", unused)
+	sort.Strings(md.Unused)
+	if !reflect.DeepEqual(md.Unused, expectedUnused) {
+		t.Fatalf("bad unused: %#v", md.Unused)
 	}
 }
 
@@ -1770,26 +1768,23 @@ func TestMetadata(t *testing.T) {
 	}
 
 	expectedKeys := []string{"Vbar", "Vbar.Vstring", "Vbar.Vuint", "Vfoo"}
-	keys := md.KeysFull()
-	sort.Strings(keys)
-	if !reflect.DeepEqual(keys, expectedKeys) {
-		t.Fatalf("bad keys: %#v", keys)
+	sort.Strings(md.Keys)
+	if !reflect.DeepEqual(md.Keys, expectedKeys) {
+		t.Fatalf("bad keys: %#v", md.Keys)
 	}
 
 	expectedUnused := []string{"bar", "vbar[foo]", "vbar[vsilent]"}
-	unused := md.UnusedFull()
-	sort.Strings(unused)
-	if !reflect.DeepEqual(unused, expectedUnused) {
-		t.Fatalf("bad unused: %#v", unused)
+	sort.Strings(md.Unused)
+	if !reflect.DeepEqual(md.Unused, expectedUnused) {
+		t.Fatalf("bad unused: %#v", md.Unused)
 	}
 
 	expectedUnset := []string{
 		"Vbar.Vbool", "Vbar.Vdata", "Vbar.Vextra", "Vbar.Vfloat", "Vbar.Vint",
 		"Vbar.VjsonFloat", "Vbar.VjsonInt", "Vbar.VjsonNumber"}
-	unsets := md.UnsetFull()
-	sort.Strings(unsets)
-	if !reflect.DeepEqual(unsets, expectedUnset) {
-		t.Fatalf("bad unset: %#v", unsets)
+	sort.Strings(md.Unset)
+	if !reflect.DeepEqual(md.Unset, expectedUnset) {
+		t.Fatalf("bad unset: %#v", md.Unset)
 	}
 }
 
@@ -1811,17 +1806,14 @@ func TestMetadata_Embedded(t *testing.T) {
 	}
 
 	expectedKeys := []string{"Vstring", "Vunique"}
-
-	keys := md.Keys()
-	sort.Strings(keys)
-	if !reflect.DeepEqual(keys, expectedKeys) {
-		t.Fatalf("bad keys: %#v", keys)
+	sort.Strings(md.Keys)
+	if !reflect.DeepEqual(md.Keys, expectedKeys) {
+		t.Fatalf("bad keys: %#v", md.Keys)
 	}
 
 	expectedUnused := []string{}
-	unused := md.Unused()
-	if !reflect.DeepEqual(unused, expectedUnused) {
-		t.Fatalf("bad unused: %#v", unused)
+	if !reflect.DeepEqual(md.Unused, expectedUnused) {
+		t.Fatalf("bad unused: %#v", md.Unused)
 	}
 }
 
@@ -1918,17 +1910,15 @@ func TestWeakDecodeMetadata(t *testing.T) {
 	}
 
 	expectedKeys := []string{"Bar", "Foo"}
-	keys := md.Keys()
-	sort.Strings(keys)
-	if !reflect.DeepEqual(keys, expectedKeys) {
-		t.Fatalf("bad keys: %#v", keys)
+	sort.Strings(md.Keys)
+	if !reflect.DeepEqual(md.Keys, expectedKeys) {
+		t.Fatalf("bad keys: %#v", md.Keys)
 	}
 
 	expectedUnused := []string{"unexported", "unused"}
-	unused := md.Unused()
-	sort.Strings(unused)
-	if !reflect.DeepEqual(unused, expectedUnused) {
-		t.Fatalf("bad unused: %#v", unused)
+	sort.Strings(md.Unused)
+	if !reflect.DeepEqual(md.Unused, expectedUnused) {
+		t.Fatalf("bad unused: %#v", md.Unused)
 	}
 }
 

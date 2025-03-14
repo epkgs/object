@@ -95,7 +95,7 @@ func ExampleAssign_metadata() {
 		panic(err)
 	}
 
-	fmt.Printf("Unused keys: %#v", md.Unused())
+	fmt.Printf("Unused keys: %#v", md.Unused)
 	// Output:
 	// Unused keys: []string{"email"}
 }
