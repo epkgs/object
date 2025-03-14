@@ -201,7 +201,7 @@ func (m *Metadata) UnusedFull() []string {
 	if m._unusedFull == nil {
 		m._unusedFull = m.unused.FullActualNames()
 	}
-	return m._unused
+	return m._unusedFull
 }
 
 func (m *Metadata) Unset() []string {
@@ -214,7 +214,7 @@ func (m *Metadata) UnsetFull() []string {
 	if m._unsetFull == nil {
 		m._unsetFull = m.unset.FullDisplayNames()
 	}
-	return m._unset
+	return m._unsetFull
 }
 
 // Assign 将 source 对象的值解码并赋值给 target 对象。
