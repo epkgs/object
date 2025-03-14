@@ -1275,17 +1275,11 @@ func (a *assigner) shouldSkipKey(targetKey, sourceKey *Key) bool {
 		return false
 	}
 
-	if len(a.config.SkipKeys) == 0 {
-		return false
-	}
-
-	targetDisplay := targetKey.displayFull
-	targetActual := targetKey.actualFull
-	sourceDisplay := sourceKey.displayFull
-	sourceActual := sourceKey.actualFull
-
 	for _, keyToSkip := range a.config.SkipKeys {
-		if targetDisplay == keyToSkip || targetActual == keyToSkip || sourceDisplay == keyToSkip || sourceActual == keyToSkip {
+		if targetKey.displayFull == keyToSkip ||
+			targetKey.actualFull == keyToSkip ||
+			sourceKey.displayFull == keyToSkip ||
+			sourceKey.actualFull == keyToSkip {
 			a.addMetaUnused(sourceKey)
 			a.addMetaUnset(targetKey)
 			return true
