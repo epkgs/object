@@ -169,27 +169,52 @@ type Metadata struct {
 	// but weren't set in the decoding process since there was no matching value
 	// in the input
 	unset Keys
+
+	_keys       []string
+	_keysFull   []string
+	_unused     []string
+	_unusedFull []string
+	_unset      []string
+	_unsetFull  []string
 }
 
 func (m *Metadata) Keys() []string {
-	return m.keys.RootDisplayNames()
+	if m._keys == nil {
+		m._keys = m.keys.RootDisplayNames()
+	}
+	return m._keys
 }
 func (m *Metadata) KeysFull() []string {
-	return m.keys.FullDisplayNames()
+	if m._keysFull == nil {
+		m._keysFull = m.keys.FullDisplayNames()
+	}
+	return m._keysFull
 }
 
 func (m *Metadata) Unused() []string {
-	return m.unused.RootActualNames()
+	if m._unused == nil {
+		m._unused = m.unused.RootActualNames()
+	}
+	return m._unused
 }
 func (m *Metadata) UnusedFull() []string {
-	return m.unused.FullActualNames()
+	if m._unusedFull == nil {
+		m._unusedFull = m.unused.FullActualNames()
+	}
+	return m._unused
 }
 
 func (m *Metadata) Unset() []string {
-	return m.unset.RootDisplayNames()
+	if m._unset == nil {
+		m._unset = m.unset.RootDisplayNames()
+	}
+	return m._unset
 }
 func (m *Metadata) UnsetFull() []string {
-	return m.unset.FullDisplayNames()
+	if m._unsetFull == nil {
+		m._unsetFull = m.unset.FullDisplayNames()
+	}
+	return m._unset
 }
 
 // Assign 将 source 对象的值解码并赋值给 target 对象。
