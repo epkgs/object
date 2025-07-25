@@ -154,49 +154,44 @@ func (a *assigner) Assign(target, source any, configs ...func(c *AssignConfig)) 
 		as = as.withConfig(configs...)
 	}
 
+	sourceVal := reflect.ValueOf(source)
+
 	// Perform the assignment
-	return as.assign(targetVal, "", source, "")
+	return as.assign(targetVal, "", sourceVal, "")
 }
 
 // assign decodes an unknown data type into a specific reflection value.
-func (a *assigner) assign(targetVal reflect.Value, targetKey metaKey, source any, sourceKey metaKey) error {
+func (a *assigner) assign(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) error {
 	// Check if we should skip this key based on configuration
 	if a.shouldSkipKey(targetKey, sourceKey) {
 		return nil
 	}
 
-	// Get reflection value of source
-	sourceVal := reflect.ValueOf(source)
-
 	// Handle typed nil values
-	if source != nil {
+	if sourceVal.IsValid() {
 		// Check if input is a typed nil. Typed nils won't
 		// match the "source == nil" check below, so we handle them here.
 		if sourceVal.Kind() == reflect.Ptr && sourceVal.IsNil() {
-			source = nil
+			sourceVal = reflect.Value{}
 		}
-	}
-
-	// Handle nil values
-	if source == nil {
-		return nil
 	}
 
 	// Handle invalid source values
 	if !sourceVal.IsValid() {
-		// If the source value is invalid, set the target to its zero value
-		targetVal.Set(reflect.Zero(targetVal.Type()))
-		a.addMetaKey(targetKey)
 		return nil
 	}
 
 	// Skip same values if configured to do so
 	if a.config.SkipSameValues {
-		if reflect.DeepEqual(targetVal.Interface(), source) {
+		if reflect.DeepEqual(targetVal.Interface(), sourceVal.Interface()) {
 			a.addMetaUnused(sourceKey)
 			a.addMetaUnset(targetKey)
 			return nil
 		}
+	}
+
+	if sourceVal.Kind() == reflect.Interface {
+		sourceVal = sourceVal.Elem()
 	}
 
 	// Process based on target type
@@ -206,29 +201,29 @@ func (a *assigner) assign(targetVal reflect.Value, targetKey metaKey, source any
 
 	switch targetKind {
 	case reflect.Bool:
-		err = a.assignBool(targetVal, targetKey, source, sourceKey)
+		err = a.assignBool(targetVal, targetKey, sourceVal, sourceKey)
 	case reflect.Interface:
-		err = a.assignBasic(targetVal, targetKey, source, sourceKey)
+		err = a.assignBasic(targetVal, targetKey, sourceVal, sourceKey)
 	case reflect.String:
-		err = a.assignString(targetVal, targetKey, source, sourceKey)
+		err = a.assignString(targetVal, targetKey, sourceVal, sourceKey)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		err = a.assignInt(targetVal, targetKey, source, sourceKey)
+		err = a.assignInt(targetVal, targetKey, sourceVal, sourceKey)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		err = a.assignUint(targetVal, targetKey, source, sourceKey)
+		err = a.assignUint(targetVal, targetKey, sourceVal, sourceKey)
 	case reflect.Float32, reflect.Float64:
-		err = a.assignFloat(targetVal, targetKey, source, sourceKey)
+		err = a.assignFloat(targetVal, targetKey, sourceVal, sourceKey)
 	case reflect.Struct:
-		err = a.assignStruct(targetVal, targetKey, source, sourceKey)
+		err = a.assignStruct(targetVal, targetKey, sourceVal, sourceKey)
 	case reflect.Map:
-		err = a.assignMap(targetVal, targetKey, source, sourceKey)
+		err = a.assignMap(targetVal, targetKey, sourceVal, sourceKey)
 	case reflect.Ptr:
-		addMetaKey, err = a.assignPtr(targetVal, targetKey, source, sourceKey)
+		addMetaKey, err = a.assignPtr(targetVal, targetKey, sourceVal, sourceKey)
 	case reflect.Slice:
-		err = a.assignSlice(targetVal, targetKey, source, sourceKey)
+		err = a.assignSlice(targetVal, targetKey, sourceVal, sourceKey)
 	case reflect.Array:
-		err = a.assignArray(targetVal, targetKey, source, sourceKey)
+		err = a.assignArray(targetVal, targetKey, sourceVal, sourceKey)
 	case reflect.Func:
-		err = a.assignFunc(targetVal, targetKey, source, sourceKey)
+		err = a.assignFunc(targetVal, targetKey, sourceVal, sourceKey)
 	default:
 		// Unsupported type
 		return fmt.Errorf("%s: unsupported type: %s", targetKey.String(), targetKind)
@@ -244,7 +239,7 @@ func (a *assigner) assign(targetVal reflect.Value, targetKey metaKey, source any
 
 // assignBasic decodes a basic type (bool, int, string, etc.) and sets the
 // value to "data" of that type.
-func (a *assigner) assignBasic(targetVal reflect.Value, targetKey metaKey, source any, sourceKey metaKey) error {
+func (a *assigner) assignBasic(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) error {
 	// Handle the case where targetVal is a valid pointer to a valid element
 	if targetVal.IsValid() && targetVal.Elem().IsValid() {
 		elem := targetVal.Elem()
@@ -269,7 +264,7 @@ func (a *assigner) assignBasic(targetVal reflect.Value, targetKey metaKey, sourc
 		// Decode the value. If there's an error, return it immediately.
 		// Also return immediately if we're not working with a copy,
 		// which means we decoded directly.
-		if err := a.assign(elem, targetKey, source, sourceKey); err != nil || !copied {
+		if err := a.assign(elem, targetKey, sourceVal, sourceKey); err != nil || !copied {
 			return err
 		}
 
@@ -277,9 +272,6 @@ func (a *assigner) assignBasic(targetVal reflect.Value, targetKey metaKey, sourc
 		targetVal.Set(elem.Elem())
 		return nil
 	}
-
-	// Get the reflection value of the source
-	sourceVal := reflect.ValueOf(source)
 
 	// If the input data is a pointer, and the assigned type is the dereference
 	// of that exact pointer, then indirect it so that we can assign it.
@@ -307,9 +299,9 @@ func (a *assigner) assignBasic(targetVal reflect.Value, targetKey metaKey, sourc
 }
 
 // assignString assigns a value to a string target, performing type conversions as needed.
-func (a *assigner) assignString(targetVal reflect.Value, targetKey metaKey, source any, sourceKey metaKey) error {
+func (a *assigner) assignString(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) error {
 	// Get the source value, dereferencing pointers if necessary
-	sourceVal := reflect.Indirect(reflect.ValueOf(source))
+	sourceVal = reflect.Indirect(sourceVal)
 	sourceKind := sourceVal.Kind()
 
 	if isString(sourceKind) {
@@ -377,12 +369,12 @@ func (a *assigner) assignString(targetVal reflect.Value, targetKey metaKey, sour
 		targetKey.String(),
 		targetVal.Type(),
 		sourceVal.Type(),
-		source,
+		sourceVal.Interface(),
 	)
 }
 
-func (a *assigner) assignInt(targetVal reflect.Value, targetKey metaKey, source any, sourceKey metaKey) error {
-	sourceVal := reflect.Indirect(reflect.ValueOf(source))
+func (a *assigner) assignInt(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) error {
+	sourceVal = reflect.Indirect(sourceVal)
 	sourceKind := sourceVal.Kind()
 	sourceType := sourceVal.Type()
 
@@ -428,7 +420,7 @@ func (a *assigner) assignInt(targetVal reflect.Value, targetKey metaKey, source 
 	}
 
 	if sourceType.PkgPath() == "encoding/json" && sourceType.Name() == "Number" {
-		jn := source.(json.Number)
+		jn := sourceVal.Interface().(json.Number)
 		i, err := jn.Int64()
 		if err != nil {
 			return fmt.Errorf(
@@ -443,12 +435,12 @@ func (a *assigner) assignInt(targetVal reflect.Value, targetKey metaKey, source 
 		targetKey.String(),
 		targetVal.Type(),
 		sourceVal.Type(),
-		source,
+		sourceVal.Interface(),
 	)
 }
 
-func (a *assigner) assignUint(targetVal reflect.Value, targetKey metaKey, source any, sourceKey metaKey) error {
-	sourceVal := reflect.Indirect(reflect.ValueOf(source))
+func (a *assigner) assignUint(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) error {
+	sourceVal = reflect.Indirect(sourceVal)
 	sourceKind := sourceVal.Kind()
 	sourceType := sourceVal.Type()
 
@@ -504,7 +496,7 @@ func (a *assigner) assignUint(targetVal reflect.Value, targetKey metaKey, source
 	}
 
 	if isJsonNumber(sourceType) {
-		jn, ok := source.(json.Number)
+		jn, ok := sourceVal.Interface().(json.Number)
 		if !ok {
 			return fmt.Errorf("expected json.Number, got different type for '%s'", targetKey.String())
 		}
@@ -522,12 +514,12 @@ func (a *assigner) assignUint(targetVal reflect.Value, targetKey metaKey, source
 		targetKey.String(),
 		targetVal.Type(),
 		sourceVal.Type(),
-		source,
+		sourceVal.Interface(),
 	)
 }
 
-func (a *assigner) assignBool(targetVal reflect.Value, targetKey metaKey, source any, sourceKey metaKey) error {
-	sourceVal := reflect.Indirect(reflect.ValueOf(source))
+func (a *assigner) assignBool(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) error {
+	sourceVal = reflect.Indirect(sourceVal)
 	sourceKind := sourceVal.Kind()
 
 	if isBool(sourceKind) {
@@ -569,12 +561,12 @@ func (a *assigner) assignBool(targetVal reflect.Value, targetKey metaKey, source
 		targetKey.String(),
 		targetVal.Type(),
 		sourceVal.Type(),
-		source,
+		sourceVal.Interface(),
 	)
 }
 
-func (a *assigner) assignFloat(targetVal reflect.Value, targetKey metaKey, source any, sourceKey metaKey) error {
-	sourceVal := reflect.Indirect(reflect.ValueOf(source))
+func (a *assigner) assignFloat(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) error {
+	sourceVal = reflect.Indirect(sourceVal)
 	sourceKind := sourceVal.Kind()
 	sourceType := sourceVal.Type()
 
@@ -628,7 +620,9 @@ func (a *assigner) assignFloat(targetVal reflect.Value, targetKey metaKey, sourc
 	}
 
 	if isJsonNumber(sourceType) {
-		jn, ok := source.(json.Number)
+		// We need to get the interface to type assert to json.Number
+		sourceInterface := sourceVal.Interface()
+		jn, ok := sourceInterface.(json.Number)
 		if !ok {
 			return fmt.Errorf("error decoding json.Number into %s: type assertion failed", targetKey.String())
 		}
@@ -645,7 +639,7 @@ func (a *assigner) assignFloat(targetVal reflect.Value, targetKey metaKey, sourc
 		targetKey.String(),
 		targetVal.Type(),
 		sourceVal.Type(),
-		source,
+		sourceVal.Interface(),
 	)
 }
 
@@ -670,8 +664,8 @@ func (a *assigner) checkNaNAndInf(key metaKey, f float64) error {
 	return nil
 }
 
-func (a *assigner) assignMap(targetVal reflect.Value, targetKey metaKey, source any, sourceKey metaKey) error {
-	sourceVal := reflect.Indirect(reflect.ValueOf(source))
+func (a *assigner) assignMap(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) error {
+	sourceVal = reflect.Indirect(sourceVal)
 
 	// Handle nil case explicitly
 	if !sourceVal.IsValid() {
@@ -720,7 +714,7 @@ func (a *assigner) assignMapFromSlice(targetVal reflect.Value, targetKey metaKey
 		err := a.assign(
 			targetVal,
 			targetKey,
-			srcElem.Interface(),
+			srcElem,
 			sourceKey.newChild(reflect.Slice, k),
 		)
 		if err != nil {
@@ -769,13 +763,13 @@ func (a *assigner) assignMapFromMap(targetVal reflect.Value, targetKey metaKey, 
 
 		// First decode the key into the proper type
 		currentKey := reflect.Indirect(reflect.New(targetValKeyType))
-		if err := weakAssigner.assign(currentKey, "", srcKey.Interface(), ""); err != nil {
+		if err := weakAssigner.assign(currentKey, "", srcKey, ""); err != nil {
 			errors = appendErrors(errors, err)
 			continue
 		}
 
 		// Next decode the data into the proper type
-		if err := a.assign(targetElem, childTargetKey, sourceElem.Interface(), childSourceKey); err != nil {
+		if err := a.assign(targetElem, childTargetKey, sourceElem, childSourceKey); err != nil {
 			errors = appendErrors(errors, err)
 			continue
 		}
@@ -816,7 +810,7 @@ func (a *assigner) assignMapFromStruct(targetVal reflect.Value, targetKey metaKe
 		}
 
 		keyVal := reflect.Indirect(reflect.New(targetKeyType))
-		if err := weakAssigner.assign(keyVal, "", srcField.actualName, ""); err != nil {
+		if err := weakAssigner.assign(keyVal, "", srcField.ActualNameVal(), ""); err != nil {
 			return fmt.Errorf("error converting map key '%s': %w", srcField.actualName, err)
 		}
 
@@ -861,23 +855,25 @@ func (a *assigner) assignMapFromStruct(targetVal reflect.Value, targetKey metaKe
 	return nil
 }
 
-func (a *assigner) assignPtr(targetVal reflect.Value, targetKey metaKey, source any, sourceKey metaKey) (bool, error) {
+func (a *assigner) assignPtr(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) (bool, error) {
 	// If the input data is nil, then we want to just set the output
 	// pointer to be nil as well.
-	isNil := source == nil
-	if !isNil {
-		switch v := reflect.Indirect(reflect.ValueOf(source)); v.Kind() {
-		case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
-			isNil = v.IsNil()
+	if isPtrAble(sourceVal.Kind()) {
+		isNil := sourceVal.IsNil()
+		if !isNil {
+			switch v := reflect.Indirect(sourceVal); v.Kind() {
+			case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+				isNil = v.IsNil()
+			}
 		}
-	}
-	if isNil {
-		if !targetVal.IsNil() && targetVal.CanSet() {
-			nilValue := reflect.New(targetVal.Type()).Elem()
-			targetVal.Set(nilValue)
-		}
+		if isNil {
+			if !targetVal.IsNil() && targetVal.CanSet() {
+				nilValue := reflect.New(targetVal.Type()).Elem()
+				targetVal.Set(nilValue)
+			}
 
-		return true, nil
+			return true, nil
+		}
 	}
 
 	// Create an element of the concrete (non pointer) type and decode
@@ -890,77 +886,83 @@ func (a *assigner) assignPtr(targetVal reflect.Value, targetKey metaKey, source 
 			realVal = reflect.New(targetValElemType)
 		}
 
-		if err := a.assign(reflect.Indirect(realVal), targetKey, source, sourceKey); err != nil {
+		if err := a.assign(reflect.Indirect(realVal), targetKey, sourceVal, sourceKey); err != nil {
 			return false, err
 		}
 
 		targetVal.Set(realVal)
 	} else {
-		if err := a.assign(reflect.Indirect(targetVal), targetKey, source, sourceKey); err != nil {
+		if err := a.assign(reflect.Indirect(targetVal), targetKey, sourceVal, sourceKey); err != nil {
 			return false, err
 		}
 	}
 	return false, nil
 }
 
-func (a *assigner) assignFunc(targetVal reflect.Value, targetKey metaKey, source any, sourceKey metaKey) error {
+func (a *assigner) assignFunc(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) error {
 	// Create an element of the concrete (non pointer) type and decode
 	// into that. Then set the value of the pointer to this type.
-	sourceVal := reflect.Indirect(reflect.ValueOf(source))
+	sourceVal = reflect.Indirect(sourceVal)
 	if targetVal.Type() != sourceVal.Type() {
 		return fmt.Errorf(
 			"'%s' expected type '%s', got unconvertible type '%s', value: '%v'",
-			targetKey.String(), targetVal.Type(), sourceVal.Type(), source)
+			targetKey.String(),
+			targetVal.Type(),
+			sourceVal.Type(),
+			sourceVal.Interface(),
+		)
 	}
 	targetVal.Set(sourceVal)
 	return nil
 }
 
-func (a *assigner) assignSlice(targetVal reflect.Value, targetKey metaKey, source any, sourceKey metaKey) error {
-	sourceVal := reflect.Indirect(reflect.ValueOf(source))
-	sourceValKind := sourceVal.Kind()
+func (a *assigner) assignSlice(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) error {
+	sourceVal = reflect.Indirect(sourceVal)
+	sourceKind := sourceVal.Kind()
+
 	targetValType := targetVal.Type()
 	targetValElemType := targetValType.Elem()
 	sliceType := reflect.SliceOf(targetValElemType)
 
 	// If we have a non array/slice type then we first attempt to convert.
-	if !isArraySlice(sourceValKind) {
+	if !isArraySlice(sourceKind) {
 		if !a.config.WeaklyTypedInput {
 			return fmt.Errorf(
 				"'%s': source data must be an array or slice, got %s",
 				targetKey.String(),
-				sourceValKind,
+				sourceKind,
 			)
 		}
 
 		switch {
 		// Slice and array we use the normal logic
-		case sourceValKind == reflect.Slice, sourceValKind == reflect.Array:
+		case sourceKind == reflect.Slice, sourceKind == reflect.Array:
 			break
 
 		// Empty maps turn into empty slices
-		case sourceValKind == reflect.Map:
+		case sourceKind == reflect.Map:
 			if sourceVal.Len() == 0 {
 				targetVal.Set(reflect.MakeSlice(sliceType, 0, 0))
 				a.addMetaKey(targetKey)
 				return nil
 			}
 			// Create slice of maps of other sizes
-			return a.assignSlice(targetVal, targetKey, []any{source}, sourceKey)
+			return a.assignSlice(targetVal, targetKey, wrapSlice(sourceVal), sourceKey)
 
-		case sourceValKind == reflect.String && targetValElemType.Kind() == reflect.Uint8:
-			return a.assignSlice(targetVal, targetKey, []byte(sourceVal.String()), sourceKey)
+		case sourceKind == reflect.String && targetValElemType.Kind() == reflect.Uint8:
+			// Convert sourceVal from type string to type []byte
+			return a.assignSlice(targetVal, targetKey, reflect.ValueOf([]byte(sourceVal.String())), sourceKey)
 
 		// All other types we try to convert to the slice type
 		// and "lift" it into it. i.e. a string becomes a string slice.
 		default:
 			// Just re-try this function with data as a slice.
-			return a.assignSlice(targetVal, targetKey, []any{source}, sourceKey)
+			return a.assignSlice(targetVal, targetKey, wrapSlice(sourceVal), sourceKey)
 		}
 	}
 
 	// If the input value is nil, then don't allocate since empty != nil
-	if sourceValKind != reflect.Array && sourceVal.IsNil() {
+	if sourceKind != reflect.Array && sourceVal.IsNil() {
 		return nil
 	}
 
@@ -995,7 +997,7 @@ func (a *assigner) assignSlice(targetVal reflect.Value, targetKey metaKey, sourc
 			continue
 		}
 
-		if err := a.assign(targetField, targetFieldKey, sourceElem.Interface(), sourceFieldKey); err != nil {
+		if err := a.assign(targetField, targetFieldKey, sourceElem, sourceFieldKey); err != nil {
 			errors = appendErrors(errors, err)
 		}
 	}
@@ -1011,9 +1013,20 @@ func (a *assigner) assignSlice(targetVal reflect.Value, targetKey metaKey, sourc
 	return nil
 }
 
-func (a *assigner) assignArray(targetVal reflect.Value, targetKey metaKey, source any, sourceKey metaKey) error {
-	sourceVal := reflect.Indirect(reflect.ValueOf(source))
-	sourceValKind := sourceVal.Kind()
+func wrapSlice(val reflect.Value) reflect.Value {
+	// sliceType := reflect.SliceOf(reflect.TypeOf((*any)(nil)).Elem())
+	sliceType := reflect.SliceOf(val.Type())
+
+	sliceValue := reflect.MakeSlice(sliceType, 1, 1)
+
+	sliceValue.Index(0).Set(val)
+
+	return sliceValue
+}
+
+func (a *assigner) assignArray(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) error {
+	sourceVal = reflect.Indirect(sourceVal)
+	sourceKind := sourceVal.Kind()
 	targetValType := targetVal.Type()
 	targetValElemType := targetValType.Elem()
 	arrayType := reflect.ArrayOf(targetValType.Len(), targetValElemType)
@@ -1022,11 +1035,11 @@ func (a *assigner) assignArray(targetVal reflect.Value, targetKey metaKey, sourc
 
 	if valArray.Interface() == reflect.Zero(valArray.Type()).Interface() {
 		// Check input type
-		if sourceValKind != reflect.Array && sourceValKind != reflect.Slice {
+		if sourceKind != reflect.Array && sourceKind != reflect.Slice {
 			if a.config.WeaklyTypedInput {
 				switch {
 				// Empty maps turn into empty arrays
-				case sourceValKind == reflect.Map:
+				case sourceKind == reflect.Map:
 					if sourceVal.Len() == 0 {
 						targetVal.Set(reflect.Zero(arrayType))
 						a.addMetaKey(targetKey)
@@ -1036,13 +1049,15 @@ func (a *assigner) assignArray(targetVal reflect.Value, targetKey metaKey, sourc
 				// All other types we try to convert to the array type
 				// and "lift" it into it. i.e. a string becomes a string array.
 				default:
+					newSlice := reflect.MakeSlice(reflect.SliceOf(sourceVal.Type()), 1, 1)
+					newSlice.Index(0).Set(sourceVal)
 					// Just re-try this function with source as a slice.
-					return a.assignArray(targetVal, targetKey, []any{source}, sourceKey)
+					return a.assignArray(targetVal, targetKey, newSlice, sourceKey)
 				}
 			}
 
 			return fmt.Errorf(
-				"'%s': source data must be an array or slice, got %s", targetKey.String(), sourceValKind)
+				"'%s': source data must be an array or slice, got %s", targetKey.String(), sourceKind)
 
 		}
 		if sourceVal.Len() > arrayType.Len() {
@@ -1070,7 +1085,7 @@ func (a *assigner) assignArray(targetVal reflect.Value, targetKey metaKey, sourc
 		if a.shouldSkipKey(targetFieldKey, sourceFieldKey) {
 			continue
 		}
-		if err := a.assign(targetField, targetFieldKey, sourceElem.Interface(), sourceFieldKey); err != nil {
+		if err := a.assign(targetField, targetFieldKey, sourceElem, sourceFieldKey); err != nil {
 			errors = appendErrors(errors, err)
 		}
 	}
@@ -1094,26 +1109,42 @@ func (a *assigner) assignArray(targetVal reflect.Value, targetKey metaKey, sourc
 	return nil
 }
 
-func (a *assigner) assignStruct(targetVal reflect.Value, targetKey metaKey, source any, sourceKey metaKey) error {
+func (a *assigner) assignStruct(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) error {
 
-	sourceVal := reflect.Indirect(reflect.ValueOf(source))
+	sourceVal = reflect.Indirect(sourceVal)
+	sourceKind := sourceVal.Kind()
 
-	sourceValKind := sourceVal.Kind()
-	switch sourceValKind {
+	switch sourceKind {
 	case reflect.Map:
 		return a.assignStructFromMap(targetVal, targetKey, sourceVal, sourceKey)
 	case reflect.Struct:
 		return a.assignStructFromStruct(targetVal, targetKey, sourceVal, sourceKey)
 	}
-	return fmt.Errorf("'%s' expected a map, got '%s'", targetKey.String(), sourceVal.Kind())
+	return fmt.Errorf("'%s' expected a map, got '%s'", targetKey.String(), sourceKind)
 }
 
 type fieldInfo struct {
-	field       reflect.StructField
-	fieldVal    reflect.Value
-	displayName string
-	actualName  string
-	omitempty   bool
+	field          reflect.StructField
+	fieldVal       reflect.Value
+	displayName    string
+	displayNameVal reflect.Value
+	actualName     string
+	actualNameVal  reflect.Value
+	omitempty      bool
+}
+
+func (info *fieldInfo) DisplayNameVal() reflect.Value {
+	if !info.displayNameVal.IsValid() {
+		info.displayNameVal = reflect.ValueOf(info.displayName)
+	}
+	return info.displayNameVal
+}
+
+func (info *fieldInfo) ActualNameVal() reflect.Value {
+	if !info.actualNameVal.IsValid() {
+		info.actualNameVal = reflect.ValueOf(info.actualName)
+	}
+	return info.actualNameVal
 }
 
 func (a *assigner) flattenStruct(val reflect.Value) map[string]fieldInfo {
@@ -1211,7 +1242,7 @@ func (a *assigner) assignStructFromMap(targetVal reflect.Value, targetKey metaKe
 	errors := make([]string, 0)
 	for _, targetField := range targetFields {
 
-		if err := weakAssigner.assign(mapKey, "", targetField.actualName, ""); err != nil {
+		if err := weakAssigner.assign(mapKey, "", targetField.ActualNameVal(), ""); err != nil {
 			errors = appendErrors(errors, err)
 			continue
 		}
@@ -1222,6 +1253,9 @@ func (a *assigner) assignStructFromMap(targetVal reflect.Value, targetKey metaKe
 		if !value.IsValid() {
 			a.addMetaUnset(targetFieldKey)
 			continue
+		}
+		if value.Kind() == reflect.Interface {
+			value = value.Elem()
 		}
 
 		sourceFieldKey := sourceKey.newChild(reflect.Map, targetField.actualName)
@@ -1238,7 +1272,7 @@ func (a *assigner) assignStructFromMap(targetVal reflect.Value, targetKey metaKe
 		// Remove processed key
 		delete(unusedMapKeys, targetField.actualName)
 
-		if err := a.assign(targetField.fieldVal, targetFieldKey, value.Interface(), sourceFieldKey); err != nil {
+		if err := a.assign(targetField.fieldVal, targetFieldKey, value, sourceFieldKey); err != nil {
 			errors = appendErrors(errors, err)
 		}
 	}
@@ -1287,7 +1321,7 @@ func (a *assigner) assignStructFromStruct(targetVal reflect.Value, targetKey met
 		// Remove processed key
 		delete(sourceFields, tfieldName)
 
-		if err := a.assign(targetField.fieldVal, targetFieldKey, sourceField.fieldVal.Interface(), sourceFieldKey); err != nil {
+		if err := a.assign(targetField.fieldVal, targetFieldKey, sourceField.fieldVal, sourceFieldKey); err != nil {
 			errors = appendErrors(errors, err)
 		}
 	}
@@ -1495,4 +1529,13 @@ func isArraySlice(kind reflect.Kind) bool {
 
 func isJsonNumber(typ reflect.Type) bool {
 	return typ.PkgPath() == "encoding/json" && typ.Name() == "Number"
+}
+
+func isPtrAble(kind reflect.Kind) bool {
+	switch kind {
+	case reflect.Chan, reflect.Func, reflect.Map, reflect.Pointer, reflect.UnsafePointer, reflect.Interface, reflect.Slice:
+		return true
+	default:
+		return false
+	}
 }
