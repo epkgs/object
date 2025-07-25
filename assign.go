@@ -14,19 +14,15 @@ var defaultAssigner *assigner
 var weakAssigner *assigner
 
 func init() {
-	defaultAssigner = &assigner{
-		config: &AssignConfig{
-			TagName:   "json",
-			Converter: toLowerCamel,
-		},
-	}
-	weakAssigner = &assigner{
-		config: &AssignConfig{
-			TagName:          "json",
-			Converter:        toLowerCamel,
-			WeaklyTypedInput: true,
-		},
-	}
+	defaultAssigner = newAssigner(&AssignConfig{
+		TagName:   "json",
+		Converter: toLowerCamel,
+	})
+	weakAssigner = newAssigner(&AssignConfig{
+		TagName:          "json",
+		Converter:        toLowerCamel,
+		WeaklyTypedInput: true,
+	})
 }
 
 // AssignConfig is the configuration used to create a new decoder
@@ -104,7 +100,20 @@ func Assign(target any, source any, configs ...func(c *AssignConfig)) error {
 }
 
 type assigner struct {
-	config *AssignConfig
+	config        *AssignConfig
+	skipKeysCache map[string]struct{}
+}
+
+func newAssigner(c *AssignConfig) *assigner {
+	a := &assigner{
+		config: c,
+	}
+
+	for _, k := range c.SkipKeys {
+		a.skipKeysCache[k] = struct{}{}
+	}
+
+	return a
 }
 
 func (a *assigner) withConfig(configs ...func(c *AssignConfig)) *assigner {
@@ -126,9 +135,7 @@ func (a *assigner) withConfig(configs ...func(c *AssignConfig)) *assigner {
 		}
 	}
 
-	return &assigner{
-		config: &config,
-	}
+	return newAssigner(&config)
 }
 
 // Assign decodes and assigns values from the source to the target.
@@ -947,7 +954,7 @@ func (a *assigner) assignSlice(targetVal reflect.Value, targetKey metaKey, sourc
 				return nil
 			}
 			// Create slice of maps of other sizes
-			return a.assignSlice(targetVal, targetKey, wrapSlice(sourceVal), sourceKey)
+			return a.assignSlice(targetVal, targetKey, a.wrapSlice(sourceVal), sourceKey)
 
 		case sourceKind == reflect.String && targetValElemType.Kind() == reflect.Uint8:
 			// Convert sourceVal from type string to type []byte
@@ -957,7 +964,7 @@ func (a *assigner) assignSlice(targetVal reflect.Value, targetKey metaKey, sourc
 		// and "lift" it into it. i.e. a string becomes a string slice.
 		default:
 			// Just re-try this function with data as a slice.
-			return a.assignSlice(targetVal, targetKey, wrapSlice(sourceVal), sourceKey)
+			return a.assignSlice(targetVal, targetKey, a.wrapSlice(sourceVal), sourceKey)
 		}
 	}
 
@@ -1013,14 +1020,11 @@ func (a *assigner) assignSlice(targetVal reflect.Value, targetKey metaKey, sourc
 	return nil
 }
 
-func wrapSlice(val reflect.Value) reflect.Value {
-	// sliceType := reflect.SliceOf(reflect.TypeOf((*any)(nil)).Elem())
-	sliceType := reflect.SliceOf(val.Type())
-
+func (a *assigner) wrapSlice(val reflect.Value) reflect.Value {
+	valType := val.Type()
+	sliceType := reflect.SliceOf(valType)
 	sliceValue := reflect.MakeSlice(sliceType, 1, 1)
-
 	sliceValue.Index(0).Set(val)
-
 	return sliceValue
 }
 
@@ -1176,7 +1180,8 @@ func (a *assigner) flattenStruct(val reflect.Value) map[string]fieldInfo {
 				continue
 			}
 
-			if omitempty && fieldVal.IsZero() {
+			// Only check IsZero if omitempty is true to avoid unnecessary expensive operations
+			if omitempty && isZeroValue(fieldVal) {
 				continue
 			}
 
@@ -1220,6 +1225,46 @@ func (a *assigner) flattenStruct(val reflect.Value) map[string]fieldInfo {
 	return fields
 }
 
+// isZeroValue is a more efficient version of reflect.Value.IsZero
+// It avoids the expensive IsZero call for common types
+func isZeroValue(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Bool:
+		return !v.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	case reflect.Complex64, reflect.Complex128:
+		return v.Complex() == 0
+	case reflect.Array:
+		// For arrays, we need to check each element
+		for i := 0; i < v.Len(); i++ {
+			if !isZeroValue(v.Index(i)) {
+				return false
+			}
+		}
+		return true
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice, reflect.UnsafePointer:
+		return v.IsNil()
+	case reflect.String:
+		return v.Len() == 0
+	case reflect.Struct:
+		// For structs, we need to check each field
+		for i := 0; i < v.NumField(); i++ {
+			if !isZeroValue(v.Field(i)) {
+				return false
+			}
+		}
+		return true
+	default:
+		// Fall back to the standard IsZero for any other types
+		return v.IsZero()
+	}
+}
+
 func (a *assigner) assignStructFromMap(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) error {
 	sourceType := sourceVal.Type()
 	sourceTypeKey := sourceType.Key()
@@ -1253,9 +1298,6 @@ func (a *assigner) assignStructFromMap(targetVal reflect.Value, targetKey metaKe
 		if !value.IsValid() {
 			a.addMetaUnset(targetFieldKey)
 			continue
-		}
-		if value.Kind() == reflect.Interface {
-			value = value.Elem()
 		}
 
 		sourceFieldKey := sourceKey.newChild(reflect.Map, targetField.actualName)
@@ -1343,15 +1385,16 @@ func (a *assigner) shouldSkipKey(targetKey, sourceKey metaKey) bool {
 		return false
 	}
 
-	// Check if either key should be skipped based on config
-	for _, keyToSkip := range a.config.SkipKeys {
-		if string(targetKey) == keyToSkip ||
-			string(sourceKey) == keyToSkip {
-			a.addMetaUnused(sourceKey)
-			a.addMetaUnset(targetKey)
-			return true
-		}
+	// Check if target key should be skipped based on config
+	if _, exist := a.skipKeysCache[string(targetKey)]; exist {
+		return true
 	}
+
+	// Check if source key should be skipped based on config
+	if _, exist := a.skipKeysCache[string(sourceKey)]; exist {
+		return true
+	}
+
 	return false
 }
 
@@ -1455,6 +1498,7 @@ func (k metaKey) newChild(parentKind reflect.Kind, fieldName string) metaKey {
 	n := genFullKey(parentKind, string(k), fieldName)
 	return metaKey(n)
 }
+
 func genFullKey(parentKind reflect.Kind, parentFull, keyName string) string {
 	// When parentKind is 0 (reflect.Invalid), directly return keyName
 	if parentKind == 0 {
@@ -1474,8 +1518,12 @@ func genFullKey(parentKind reflect.Kind, parentFull, keyName string) string {
 	// Determine connector based on parentKind type
 	switch parentKind {
 	case reflect.Map, reflect.Array, reflect.Slice:
+		// For simple concatenation like this, direct string concatenation is actually faster
+		// than using strings.Builder due to compiler optimizations
 		return parentFull + "[" + keyName + "]"
 	default:
+		// For simple concatenation like this, direct string concatenation is actually faster
+		// than using strings.Builder due to compiler optimizations
 		return parentFull + "." + keyName
 	}
 }
