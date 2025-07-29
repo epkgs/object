@@ -106,7 +106,8 @@ type assigner struct {
 
 func newAssigner(c *AssignConfig) *assigner {
 	a := &assigner{
-		config: c,
+		config:        c,
+		skipKeysCache: make(map[string]struct{}),
 	}
 
 	for _, k := range c.SkipKeys {
