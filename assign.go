@@ -307,7 +307,7 @@ func (a *assigner) assignBasic(targetVal reflect.Value, targetKey metaKey, sourc
 }
 
 // assignString assigns a value to a string target, performing type conversions as needed.
-func (a *assigner) assignString(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) error {
+func (a *assigner) assignString(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, _ metaKey) error {
 	// Get the source value, dereferencing pointers if necessary
 	sourceVal = reflect.Indirect(sourceVal)
 	sourceKind := sourceVal.Kind()
@@ -381,7 +381,7 @@ func (a *assigner) assignString(targetVal reflect.Value, targetKey metaKey, sour
 	)
 }
 
-func (a *assigner) assignInt(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) error {
+func (a *assigner) assignInt(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, _ metaKey) error {
 	sourceVal = reflect.Indirect(sourceVal)
 	sourceKind := sourceVal.Kind()
 	sourceType := sourceVal.Type()
@@ -447,7 +447,7 @@ func (a *assigner) assignInt(targetVal reflect.Value, targetKey metaKey, sourceV
 	)
 }
 
-func (a *assigner) assignUint(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) error {
+func (a *assigner) assignUint(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, _ metaKey) error {
 	sourceVal = reflect.Indirect(sourceVal)
 	sourceKind := sourceVal.Kind()
 	sourceType := sourceVal.Type()
@@ -573,7 +573,7 @@ func (a *assigner) assignBool(targetVal reflect.Value, targetKey metaKey, source
 	)
 }
 
-func (a *assigner) assignFloat(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) error {
+func (a *assigner) assignFloat(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, _ metaKey) error {
 	sourceVal = reflect.Indirect(sourceVal)
 	sourceKind := sourceVal.Kind()
 	sourceType := sourceVal.Type()
@@ -907,7 +907,7 @@ func (a *assigner) assignPtr(targetVal reflect.Value, targetKey metaKey, sourceV
 	return false, nil
 }
 
-func (a *assigner) assignFunc(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, sourceKey metaKey) error {
+func (a *assigner) assignFunc(targetVal reflect.Value, targetKey metaKey, sourceVal reflect.Value, _ metaKey) error {
 	// Create an element of the concrete (non pointer) type and decode
 	// into that. Then set the value of the pointer to this type.
 	sourceVal = reflect.Indirect(sourceVal)
