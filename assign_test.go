@@ -27,6 +27,7 @@ type Basic struct {
 	VjsonUint64 uint64
 	VjsonFloat  float64
 	VjsonNumber json.Number
+	VRenamed    string `json:"custom_name"`
 }
 
 type BasicPointer struct {
@@ -41,6 +42,7 @@ type BasicPointer struct {
 	VjsonInt    *int
 	VjsonFloat  *float64
 	VjsonNumber *json.Number
+	VRenamed    *string `json:"custom_name_pointer"`
 }
 
 type Embedded struct {
@@ -882,6 +884,68 @@ func TestMapOfStruct(t *testing.T) {
 
 	if result.Value["bar"].Vstring != "two" {
 		t.Errorf("bar value should be 'two', got: %s", result.Value["bar"].Vstring)
+	}
+}
+
+func p[T any](v T) *T {
+	return &v
+}
+
+func TestStruct(t *testing.T) {
+	t.Parallel()
+
+	var input = BasicPointer{
+		Vstring:  p("hello"),
+		Vint:     p(42),
+		Vuint:    p(uint(42)),
+		Vbool:    p(true),
+		Vextra:   p("extra"),
+		Vdata:    p(any(map[string]any{"foo": "bar"})),
+		Vfloat:   p(42.42),
+		VRenamed: p("hello renamed"),
+	}
+
+	var result Basic
+	err := Assign(&result, input)
+	if err != nil {
+		t.Fatalf("got an error: %s", err)
+	}
+
+	if result.Vstring != "hello" {
+		t.Errorf("string value should be 'hello', got: %s", result.Vstring)
+	}
+
+	if result.Vint != 42 {
+		t.Errorf("int value should be 42, got: %d", result.Vint)
+	}
+
+	if result.Vuint != 42 {
+		t.Errorf("uint value should be 42, got: %d", result.Vuint)
+	}
+
+	if result.Vbool != true {
+		t.Errorf("bool value should be true, got: %t", result.Vbool)
+	}
+
+	if result.Vextra != "extra" {
+		t.Errorf("extra value should be 'extra', got: %s", result.Vextra)
+	}
+
+	if result.Vdata == nil {
+		t.Errorf("data value should be 'bar', got: %s", result.Vdata)
+	}
+
+	if m, ok := result.Vdata.(map[string]any); !ok || m["foo"] != "bar" {
+		t.Errorf("data value should be 'bar', got: %s", result.Vdata)
+	}
+
+	if result.Vfloat != 42.42 {
+		t.Errorf("float value should be 42.42, got: %f", result.Vfloat)
+	}
+
+	if result.VRenamed != "hello renamed" {
+		// # only compare with the struct field name. Not the json tag name
+		t.Errorf("renamed value should be 'hello renamed', got: %s", result.VRenamed)
 	}
 }
 
