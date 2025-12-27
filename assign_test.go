@@ -1380,6 +1380,7 @@ func TestDecodeTable(t *testing.T) {
 				"vjsonUint64": uint64(0),
 				"vjsonFloat":  0.0,
 				"vjsonNumber": json.Number(""),
+				"custom_name": "",
 			},
 			false,
 		},
@@ -1421,6 +1422,7 @@ func TestDecodeTable(t *testing.T) {
 				"vjsonUint64": uint64(0),
 				"vjsonFloat":  0.0,
 				"vjsonNumber": json.Number(""),
+				"custom_name": "",
 			},
 			false,
 		},
@@ -1834,21 +1836,21 @@ func TestMetadata(t *testing.T) {
 	expectedKeys := []string{"Vbar", "Vbar.Vstring", "Vbar.Vuint", "Vfoo"}
 	sort.Strings(md.Keys)
 	if !reflect.DeepEqual(md.Keys, expectedKeys) {
-		t.Fatalf("bad keys: %#v", md.Keys)
+		t.Fatalf("bad keys, expected: %#v, got: %#v", expectedKeys, md.Keys)
 	}
 
 	expectedUnused := []string{"bar", "vbar[foo]", "vbar[vsilent]"}
 	sort.Strings(md.Unused)
 	if !reflect.DeepEqual(md.Unused, expectedUnused) {
-		t.Fatalf("bad unused: %#v", md.Unused)
+		t.Fatalf("bad unused, expected: %#v, got: %#v", expectedUnused, md.Unused)
 	}
 
 	expectedUnset := []string{
-		"Vbar.Vbool", "Vbar.Vdata", "Vbar.Vextra", "Vbar.Vfloat", "Vbar.Vint",
+		"Vbar.VRenamed", "Vbar.Vbool", "Vbar.Vdata", "Vbar.Vextra", "Vbar.Vfloat", "Vbar.Vint",
 		"Vbar.VjsonFloat", "Vbar.VjsonInt", "Vbar.VjsonNumber"}
 	sort.Strings(md.Unset)
 	if !reflect.DeepEqual(md.Unset, expectedUnset) {
-		t.Fatalf("bad unset: %#v", md.Unset)
+		t.Fatalf("bad unset, expected: %#v, got: %#v", expectedUnset, md.Unset)
 	}
 }
 
